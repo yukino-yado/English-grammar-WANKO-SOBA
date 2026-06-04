@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>英文法わんこそば 教師用</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="teacher.css" />
+</head>
+<body>
+  <div class="bg-steam steam-a"></div>
+  <div class="bg-steam steam-b"></div>
+
+  <main class="app-shell teacher-shell">
+    <header class="hero teacher-hero">
+      <div>
+        <p class="shop-label">教師用管理処</p>
+        <h1>英文法わんこそば 教師用</h1>
+        <p class="subtitle">お品書きの編集、追加問題の作成、類題候補の提示を行います。</p>
+      </div>
+      <div class="teacher-header-actions">
+        <a class="ghost-button" href="index.html?teacherPreview=1">生徒用を確認</a>
+      </div>
+    </header>
+
+    <section class="teacher-grid">
+      <section class="panel teacher-wide-card">
+        <div class="section-title spread">
+          <div class="title-left">
+            <span class="badge teacher-badge">連</span>
+            <div>
+              <h2>生徒版への反映</h2>
+              <p>同じフォルダ・同じブラウザで開くと、生徒用に自動反映できます。別端末では配布用データを作って取り込ませます。</p>
+            </div>
+          </div>
+        </div>
+        <div class="teacher-status-grid" id="packageStatus"></div>
+        <div class="teacher-action-row">
+          <button class="primary-button" id="syncBtn" type="button">生徒版へ反映</button>
+          <button class="ghost-button" id="exportBtn" type="button">配布用データを作る</button>
+          <button class="ghost-button" id="importBtn" type="button">配布用データを取り込む</button>
+          <button class="ghost-button danger-ghost" id="clearBtn" type="button">教師用データを初期化</button>
+          <input id="importPackageInput" type="file" accept="application/json,.json" hidden>
+        </div>
+        <p class="muted" id="syncMessage"></p>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <span class="badge">品</span>
+          <div>
+            <h2>お品書き編集</h2>
+            <p>生徒用のお品書き説明を単元ごとに上書きできます。</p>
+          </div>
+        </div>
+        <div class="form-stack">
+          <label>学年
+            <select id="menuGradeSelect"></select>
+          </label>
+          <label>単元
+            <select id="menuUnitSelect"></select>
+          </label>
+          <label>通常のお品書き説明
+            <textarea id="menuNormalInput" rows="7" placeholder="中学校で習う範囲の説明を書きます。"></textarea>
+          </label>
+          <label>例文（1行に1文）
+            <textarea id="menuExamplesInput" rows="4" placeholder="I am a student.&#10;Are you busy?"></textarea>
+          </label>
+          <label class="inline-check teacher-secret-toggle">
+            <input id="menuSecretEnabled" type="checkbox" checked>
+            <span>この単元に裏・お品書きを作る</span>
+          </label>
+          <label>裏・お品書き説明
+            <textarea id="menuSecretInput" rows="5" placeholder="EX向けの発展説明を書きます。作らない場合は上のチェックを外します。"></textarea>
+          </label>
+          <div class="teacher-action-row compact">
+            <button class="primary-button" id="saveMenuBtn" type="button">この説明を保存</button>
+            <button class="ghost-button" id="resetMenuBtn" type="button">編集を戻す</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-title">
+          <span class="badge">問</span>
+          <div>
+            <h2>追加問題を作る</h2>
+            <p>先生がやらせたい問題を手入力で追加します。</p>
+          </div>
+        </div>
+        <div class="form-stack">
+          <div class="mini-form-grid">
+            <label>学年<select id="qGrade"></select></label>
+            <label>単元<select id="qUnit"></select></label>
+            <label>そばの量<select id="qLevel"></select></label>
+          </div>
+          <label>日本語
+            <input id="qJp" type="text" placeholder="例：彼女は毎日音楽を聴きますか。">
+          </label>
+          <label>全文英文
+            <input id="qFull" type="text" placeholder="例：Does she listen to music every day?">
+          </label>
+          <label>穴埋め英文
+            <input id="qBlank" type="text" placeholder="例：___ she ___ to music every day?">
+          </label>
+          <label>穴埋め答え
+            <input id="qAnswer" type="text" placeholder="例：Does listen">
+          </label>
+          <label>選択肢（/ 区切り）
+            <input id="qChoices" type="text" placeholder="Does / Do / listen / listens / listening">
+          </label>
+          <label>解説
+            <textarea id="qExplanation" rows="4" placeholder="例：答えは「Does listen」です。Does を文のはじめに置き、後ろの動詞は原形 listen に戻します。"></textarea>
+          </label>
+          <button class="primary-button" id="addQuestionBtn" type="button">追加問題に入れる</button>
+        </div>
+      </section>
+
+      <section class="panel teacher-wide-card">
+        <div class="section-title spread">
+          <div class="title-left">
+            <span class="badge">類</span>
+            <div>
+              <h2>ファイル・テキストから類題候補</h2>
+              <p>読み込んだ文章を参考に、同じ単元で使える類題候補を出します。候補は編集してから追加できます。</p>
+            </div>
+          </div>
+          <button class="ghost-button" id="sampleTextBtn" type="button">サンプルを入れる</button>
+        </div>
+        <div class="similar-tool-grid">
+          <div class="form-stack">
+            <div class="mini-form-grid">
+              <label>学年<select id="similarGrade"></select></label>
+              <label>単元<select id="similarUnit"></select></label>
+              <label>そばの量<select id="similarLevel"></select></label>
+            </div>
+            <label>読み込ませるテキスト
+              <textarea id="sourceText" rows="8" placeholder="教材の英文、日本語訳、問題文などを貼り付けます。配布用データも取り込めます。"></textarea>
+            </label>
+            <div class="teacher-action-row compact">
+              <button class="ghost-button" id="sourceFileBtn" type="button">ファイルを読む</button>
+              <button class="primary-button" id="makeSimilarBtn" type="button">類題を提示</button>
+              <input id="sourceFileInput" type="file" accept=".txt,.json,text/plain,application/json" hidden>
+            </div>
+          </div>
+          <div>
+            <h3 class="teacher-subtitle">類題候補</h3>
+            <div id="suggestionList" class="suggestion-list empty-suggestions">まだ候補はありません。</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel teacher-wide-card">
+        <div class="section-title spread">
+          <div class="title-left">
+            <span class="badge">一</span>
+            <div>
+              <h2>追加問題の仕込み棚</h2>
+              <p>単元ごとに仕込み棚へ分け、生徒用では「先生からの一杯」として扱われます。</p>
+            </div>
+          </div>
+          <button class="ghost-button" id="clearQuestionsBtn" type="button">追加問題だけ削除</button>
+        </div>
+        <div id="teacherQuestionList" class="teacher-question-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="teacher.js"></script>
+</body>
+</html>

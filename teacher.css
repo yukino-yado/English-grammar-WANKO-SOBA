@@ -1,0 +1,103 @@
+.teacher-shell { max-width: 1180px; }
+.teacher-hero { align-items: flex-start; }
+.teacher-header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.teacher-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.teacher-wide-card { grid-column: 1 / -1; }
+.teacher-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.teacher-status-card { background: rgba(255, 255, 255, 0.72); border: 1px solid rgba(112, 83, 52, 0.16); border-radius: 18px; padding: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.65); }
+.teacher-status-card span { display: block; color: #73665b; font-size: 0.85rem; }
+.teacher-status-card strong { display: block; margin-top: 4px; font-size: 1.45rem; color: #402918; }
+.teacher-action-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.teacher-action-row.compact { margin-top: 8px; }
+.danger-ghost { border-color: rgba(180, 60, 50, 0.35); color: #8c2f27; }
+.form-stack { display: grid; gap: 12px; }
+.form-stack label { display: grid; gap: 6px; color: #4a3828; font-weight: 700; }
+.form-stack input, .form-stack select, .form-stack textarea { width: 100%; border: 1px solid rgba(112, 83, 52, 0.22); border-radius: 14px; padding: 11px 12px; background: rgba(255, 255, 255, 0.82); color: #3c2a1a; font: inherit; box-sizing: border-box; }
+.form-stack textarea { resize: vertical; line-height: 1.6; }
+.mini-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.similar-tool-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 18px; align-items: start; }
+.teacher-subtitle { margin: 0 0 10px; }
+.suggestion-list, .teacher-question-list { display: grid; gap: 12px; }
+.empty-suggestions { color: #7d7065; border: 1px dashed rgba(112, 83, 52, 0.26); border-radius: 18px; padding: 18px; background: rgba(255,255,255,0.45); }
+.suggestion-card, .teacher-question-card { border: 1px solid rgba(112, 83, 52, 0.16); background: rgba(255, 255, 255, 0.76); border-radius: 18px; padding: 14px; }
+.suggestion-card h4, .teacher-question-card h4 { margin: 0 0 8px; color: #412a18; }
+.suggestion-card p, .teacher-question-card p { margin: 4px 0; color: #53463a; line-height: 1.55; }
+.suggestion-card .editable-grid { display: grid; gap: 8px; margin: 10px 0; }
+.suggestion-card input, .suggestion-card textarea, .suggestion-card select { width: 100%; box-sizing: border-box; border-radius: 12px; border: 1px solid rgba(112, 83, 52, 0.2); padding: 9px 10px; font: inherit; background: #fffdf7; }
+.card-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.card-meta span { background: #f3eadc; border-radius: 999px; padding: 4px 9px; color: #604632; font-size: 0.84rem; }
+.teacher-question-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.inline-note { color: #75675a; font-size: 0.92rem; }
+@media (max-width: 860px) {
+  .teacher-grid { grid-template-columns: 1fr; }
+  .teacher-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mini-form-grid, .similar-tool-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .teacher-status-grid { grid-template-columns: 1fr; }
+  .teacher-action-row > * { width: 100%; justify-content: center; }
+}
+
+/* v1.9: 単元別の仕込み棚 */
+.teacher-shelf {
+  border: 1px solid rgba(126, 83, 48, 0.18);
+  border-radius: 22px;
+  background: rgba(255, 252, 246, 0.82);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 12px 30px rgba(76, 45, 28, 0.07);
+}
+.teacher-shelf-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+.teacher-shelf-head h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.teacher-shelf-head small {
+  color: var(--muted);
+  font-weight: 700;
+}
+.shelf-mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(140, 83, 48, 0.12);
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.teacher-shelf-items {
+  display: grid;
+  gap: 0.8rem;
+}
+.shelf-card h5 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.teacher-secret-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  background: rgba(255,255,255,0.72);
+  border: 1px dashed rgba(124, 82, 44, 0.28);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.teacher-secret-toggle input {
+  width: 18px;
+  height: 18px;
+}
+.disabled-field {
+  opacity: 0.55;
+}
+.disabled-field textarea {
+  cursor: not-allowed;
+}

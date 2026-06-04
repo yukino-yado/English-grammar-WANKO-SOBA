@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>英文法わんこそば</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-steam steam-a"></div>
+  <div class="bg-steam steam-b"></div>
+
+  <main class="app-shell">
+    <header class="hero">
+      <div>
+        <p class="shop-label">文法そば処</p>
+        <h1>英文法わんこそば</h1>
+        <p class="subtitle">1問1杯。選んで、並べて、埋めて、書ききる。</p>
+      </div>
+      <button class="ghost-button" id="openStatsBtn" type="button">メニュー</button>
+    </header>
+
+    <section id="setupScreen" class="screen active">
+      <div class="notice-card" id="exNotice"></div>
+
+      <div class="setup-grid">
+        <section class="panel">
+          <div class="section-title">
+            <span class="badge">一</span>
+            <div>
+              <h2>お客様の人数</h2>
+              <p>学年を選ぶと、基本のお品書きが決まります。</p>
+            </div>
+          </div>
+          <div class="choice-row" id="gradeButtons"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <span class="badge">二</span>
+            <div>
+              <h2>食べ方</h2>
+              <p>練習したい解き方を選んでください。</p>
+            </div>
+          </div>
+          <div class="mode-grid" id="modeButtons"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <span class="badge">三</span>
+            <div>
+              <h2>そばの量</h2>
+              <p>文法の難しさを選びます。</p>
+            </div>
+          </div>
+          <div class="level-grid" id="levelButtons"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <span class="badge">四</span>
+            <div>
+              <h2>本日の杯数</h2>
+              <p>最低10杯、最大30杯です。</p>
+            </div>
+          </div>
+          <div class="choice-row" id="cupButtons"></div>
+        </section>
+
+        <section class="panel">
+          <div class="section-title">
+            <span class="badge">五</span>
+            <div>
+              <h2>制限時間</h2>
+              <p>1問ごとの持ち時間を選びます。</p>
+            </div>
+          </div>
+          <div class="choice-row time-choice-row" id="timeButtons"></div>
+        </section>
+
+        <section class="panel teacher-panel">
+          <div class="section-title">
+            <span class="badge teacher-badge">先</span>
+            <div>
+              <h2>先生からの一杯</h2>
+              <p>教師が追加した問題を、生徒用にここへ表示します。</p>
+            </div>
+          </div>
+          <div id="teacherStudentSlot" class="teacher-slot"></div>
+        </section>
+      </div>
+
+      <section class="panel full-panel">
+        <div class="section-title spread">
+          <div class="title-left">
+            <span class="badge">六</span>
+            <div>
+              <h2>本日の単元表</h2>
+              <p>出題する単元を選べます。別学年の単元も追加できます。</p>
+            </div>
+          </div>
+          <div class="menu-actions">
+            <button class="ghost-button" id="openMenuBtn" type="button">お品書き</button>
+            <button class="ghost-button" id="openSecretMenuBtn" type="button">裏・お品書き</button>
+          </div>
+        </div>
+        <div id="unitGroups" class="unit-groups"></div>
+      </section>
+
+      <section class="start-panel">
+        <button class="primary-button" id="startBtn" type="button">開店する</button>
+        <p id="startHint" class="muted"></p>
+      </section>
+    </section>
+
+    <section id="gameScreen" class="screen">
+      <div class="game-topbar">
+        <button class="ghost-button" id="quitBtn" type="button">戻る</button>
+        <div class="progress-wrap">
+          <div class="progress-label"><span id="progressText">1 / 10杯</span><span id="streakText">0連杯</span><span id="timerText" class="timer-pill">30秒</span></div>
+          <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+        </div>
+      </div>
+
+      <div class="game-grid">
+        <aside class="bowl-panel">
+          <div id="bonusPop" class="bonus-pop"></div>
+          <div class="bowl-stack" id="bowlStack"></div>
+          <p class="muted">完食まであと <span id="remainingCups">0</span> 杯</p>
+        </aside>
+
+        <section class="question-panel">
+          <p class="mini-label" id="questionMeta"></p>
+          <h2 id="jpQuestion">日本語</h2>
+          <div id="englishPrompt" class="english-prompt"></div>
+          <div id="answerArea" class="answer-area"></div>
+          <div id="controlArea" class="control-area"></div>
+          <div id="feedback" class="feedback-card hidden"></div>
+        </section>
+      </div>
+    </section>
+
+
+    <section id="endScreen" class="screen">
+      <section class="panel stop-panel">
+        <div class="stop-mark">そこまで！</div>
+        <p id="stopSummary" class="stop-summary">本日の杯数を数えています。</p>
+        <button class="primary-button" id="showResultBtn" type="button">結果を見る</button>
+      </section>
+    </section>
+
+    <section id="resultScreen" class="screen">
+      <section class="panel result-panel">
+        <div class="result-plate">
+          <p class="shop-label">本日の会計</p>
+          <h2 id="resultTitle">完食！</h2>
+          <p id="resultSummary"></p>
+        </div>
+        <div id="resultDetails" class="result-details"></div>
+        <div id="unlockMessage" class="unlock-message"></div>
+        <div class="result-actions">
+          <button class="primary-button" id="retryBtn" type="button">もう一度食べる</button>
+          <button class="ghost-button" id="statsFromResultBtn" type="button">メニューを見る</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="modal" class="modal">
+    <div class="modal-head">
+      <h2 id="modalTitle">お品書き</h2>
+      <button class="icon-button" id="closeModalBtn" type="button" aria-label="閉じる">×</button>
+    </div>
+    <div id="modalBody" class="modal-body"></div>
+  </dialog>
+
+  <script src="script.js"></script>
+</body>
+</html>
