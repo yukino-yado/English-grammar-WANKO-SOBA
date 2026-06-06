@@ -709,7 +709,10 @@ function init() {
 }
 
 function bindEvents() {
-  $("#startBtn").addEventListener("click", startGame);
+  $("#startBtn")?.addEventListener("click", startGame);
+  $("#quickStartBtn")?.addEventListener("click", startGame);
+  $("#openSettingsBtn")?.addEventListener("click", openOrderSettings);
+  $("#openSettingsInlineBtn")?.addEventListener("click", openOrderSettings);
   $("#quitBtn").addEventListener("click", () => showScreen("setupScreen"));
   $("#retryBtn").addEventListener("click", () => {
     showScreen("setupScreen");
@@ -728,6 +731,22 @@ function bindEvents() {
   $("#modal").addEventListener("click", (event) => {
     if (event.target.id === "modal") $("#modal").close();
   });
+}
+
+function openOrderSettings() {
+  const details = $("#orderDetails");
+  if (details) {
+    details.open = true;
+    details.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function getOrderSummaryText() {
+  const grade = GRADES.find(item => item.value === state.selectedGrade)?.label || `中${state.selectedGrade}`;
+  const mode = MODES[state.selectedMode]?.label || "えらんで一杯";
+  const level = LEVELS[state.selectedLevel]?.label || "小盛り";
+  const unitCount = state.selectedUnits?.size || 0;
+  return `${grade}・${mode}・${level}・${state.selectedCups}杯・1問${state.selectedTime}秒・${unitCount}単元`;
 }
 
 function renderSetup() {
@@ -1107,23 +1126,29 @@ function renderExNotice() {
 
 function updateStartHint() {
   const hint = $("#startHint");
+  const quickSummary = $("#quickOrderSummary");
+  const startButtons = [$("#startBtn"), $("#quickStartBtn")].filter(Boolean);
   const unitCount = state.selectedUnits.size;
+  const summaryText = getOrderSummaryText();
+  if (quickSummary) quickSummary.textContent = summaryText;
+
   if (state.selectedMode === "kakikiri" && progress.solvedBank.length === 0) {
-    hint.textContent = "書ききり一杯は、先に他の食べ方で問題を解くと使えるようになります。";
-    $("#startBtn").disabled = true;
+    if (hint) hint.textContent = "書ききり一杯は、先に他の食べ方で問題を解くと使えるようになります。";
+    startButtons.forEach(button => button.disabled = true);
     return;
   }
   if (unitCount === 0 && state.selectedMode !== "kakikiri") {
-    hint.textContent = "単元表から少なくとも1つ単元を選んでください。";
-    $("#startBtn").disabled = true;
+    if (hint) hint.textContent = "単元表から少なくとも1つ単元を選んでください。";
+    startButtons.forEach(button => button.disabled = true);
     return;
   }
-  $("#startBtn").disabled = false;
-  hint.textContent = `${MODES[state.selectedMode].label}・${LEVELS[state.selectedLevel].label}・${state.selectedCups}杯・1問${state.selectedTime}秒で開始します。`;
+  startButtons.forEach(button => button.disabled = false);
+  if (hint) hint.textContent = "詳しく変えるときは「注文を変える」から設定できます。";
 }
 
 function showToastInHint(message) {
-  $("#startHint").textContent = message;
+  const hint = $("#startHint");
+  if (hint) hint.textContent = message;
 }
 
 function startGame() {
@@ -2135,7 +2160,7 @@ function getUnitMistakes(unit, secret) {
 }
 
 function openStats() {
-  $("#modalTitle").textContent = "メニュー";
+  $("#modalTitle").textContent = "食べ歩き帳";
   const weakUnits = getWeakUnits(5);
   const unitProgress = getUnitProgress(8);
   const wrongCount = (progress.wrongBank || []).length;
@@ -2152,7 +2177,7 @@ function openStats() {
     <div class="menu-hub">
       <section class="menu-hero-card">
         <div>
-          <p class="menu-hero-kicker">本日のようす</p>
+          <p class="menu-hero-kicker">学習の足あと</p>
           <h3>${escapeHtml(titleText)}</h3>
           <p>理解度 ${totalRate}%・最高 ${progress.bestStreak || 0}連杯</p>
         </div>
@@ -2164,14 +2189,11 @@ function openStats() {
       <section class="menu-section-card menu-primary-actions">
         <div class="menu-section-head">
           <span class="menu-section-icon">🍜</span>
-          <div><h3>すぐ使う</h3><p>復習・設定に戻る操作をまとめています。</p></div>
+          <div><h3>おかわり場</h3><p>間違えた問題だけを、あとから復習できます。</p></div>
         </div>
         <div class="menu-action-list">
           <button class="menu-action-button primary" id="startReviewBtn" type="button" ${wrongCount ? "" : "disabled"}>
             <span>おかわり復習</span><small>${wrongCount ? `復習待ち ${wrongCount}問` : "復習待ちはありません"}</small>
-          </button>
-          <button class="menu-action-button" id="closeMenuOnlyBtn" type="button">
-            <span>設定へ戻る</span><small>単元・杯数・時間を選び直します</small>
           </button>
         </div>
       </section>
@@ -2226,7 +2248,6 @@ function openStats() {
     </div>
   `;
   $("#modal").showModal();
-  $("#closeMenuOnlyBtn")?.addEventListener("click", () => $("#modal").close());
   $("#startReviewBtn")?.addEventListener("click", startReviewSession);
 }
 function startQuestionTimer() {

@@ -17,101 +17,123 @@
         <h1>英文法わんこそば</h1>
         <p class="subtitle">1問1杯。選んで、並べて、埋めて、書ききる。</p>
       </div>
-      <button class="ghost-button" id="openStatsBtn" type="button">メニュー</button>
+      <div class="hero-actions">
+        <button class="ghost-button" id="openSettingsBtn" type="button">注文設定</button>
+        <button class="ghost-button" id="openStatsBtn" type="button">食べ歩き帳</button>
+      </div>
     </header>
 
     <section id="setupScreen" class="screen active">
       <div class="notice-card" id="exNotice"></div>
 
-      <div class="setup-grid">
-        <section class="panel">
-          <div class="section-title">
-            <span class="badge">一</span>
-            <div>
-              <h2>お客様の人数</h2>
-              <p>学年を選ぶと、基本のお品書きが決まります。</p>
-            </div>
-          </div>
-          <div class="choice-row" id="gradeButtons"></div>
-        </section>
+      <section class="quick-order-card">
+        <div>
+          <p class="shop-label">本日の注文</p>
+          <h2>準備できたらすぐ開店できます</h2>
+          <p id="quickOrderSummary" class="quick-order-summary"></p>
+          <p id="startHint" class="muted"></p>
+        </div>
+        <div class="quick-order-actions">
+          <button class="primary-button" id="quickStartBtn" type="button">開店する</button>
+          <button class="ghost-button" id="openSettingsInlineBtn" type="button">注文を変える</button>
+        </div>
+      </section>
 
-        <section class="panel">
-          <div class="section-title">
-            <span class="badge">二</span>
-            <div>
-              <h2>食べ方</h2>
-              <p>練習したい解き方を選んでください。</p>
-            </div>
-          </div>
-          <div class="mode-grid" id="modeButtons"></div>
-        </section>
-
-        <section class="panel">
-          <div class="section-title">
-            <span class="badge">三</span>
-            <div>
-              <h2>そばの量</h2>
-              <p>文法の難しさを選びます。</p>
-            </div>
-          </div>
-          <div class="level-grid" id="levelButtons"></div>
-        </section>
-
-        <section class="panel">
-          <div class="section-title">
-            <span class="badge">四</span>
-            <div>
-              <h2>本日の杯数</h2>
-              <p>最低10杯、最大30杯です。</p>
-            </div>
-          </div>
-          <div class="choice-row" id="cupButtons"></div>
-        </section>
-
-        <section class="panel">
-          <div class="section-title">
-            <span class="badge">五</span>
-            <div>
-              <h2>制限時間</h2>
-              <p>1問ごとの持ち時間を選びます。</p>
-            </div>
-          </div>
-          <div class="choice-row time-choice-row" id="timeButtons"></div>
-        </section>
-
-        <section class="panel teacher-panel">
-          <div class="section-title">
-            <span class="badge teacher-badge">先</span>
-            <div>
-              <h2>先生からの一杯</h2>
-              <p>教師が追加した問題を、生徒用にここへ表示します。</p>
-            </div>
-          </div>
-          <div id="teacherStudentSlot" class="teacher-slot"></div>
-        </section>
-      </div>
-
-      <section class="panel full-panel">
-        <div class="section-title spread">
-          <div class="title-left">
-            <span class="badge">六</span>
-            <div>
-              <h2>本日の単元表</h2>
-              <p>出題する単元を選べます。別学年の単元も追加できます。</p>
-            </div>
-          </div>
-          <div class="menu-actions">
-            <button class="ghost-button" id="openMenuBtn" type="button">お品書き</button>
-            <button class="ghost-button" id="openSecretMenuBtn" type="button">裏・お品書き</button>
+      <section class="panel teacher-panel teacher-standalone">
+        <div class="section-title">
+          <span class="badge teacher-badge">先</span>
+          <div>
+            <h2>先生からの一杯</h2>
+            <p>教師が追加した問題を、生徒用にここへ表示します。</p>
           </div>
         </div>
-        <div id="unitGroups" class="unit-groups"></div>
+        <div id="teacherStudentSlot" class="teacher-slot"></div>
       </section>
 
-      <section class="start-panel">
-        <button class="primary-button" id="startBtn" type="button">開店する</button>
-        <p id="startHint" class="muted"></p>
-      </section>
+      <details class="order-details" id="orderDetails">
+        <summary>
+          <span>注文設定</span>
+          <small>学年・食べ方・難しさ・単元を変える</small>
+        </summary>
+        <div class="setup-grid">
+          <section class="panel">
+            <div class="section-title">
+              <span class="badge">一</span>
+              <div>
+                <h2>お客様の人数</h2>
+                <p>学年を選ぶと、基本のお品書きが決まります。</p>
+              </div>
+            </div>
+            <div class="choice-row" id="gradeButtons"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <span class="badge">二</span>
+              <div>
+                <h2>食べ方</h2>
+                <p>練習したい解き方を選んでください。</p>
+              </div>
+            </div>
+            <div class="mode-grid" id="modeButtons"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <span class="badge">三</span>
+              <div>
+                <h2>そばの量</h2>
+                <p>文法の難しさを選びます。</p>
+              </div>
+            </div>
+            <div class="level-grid" id="levelButtons"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <span class="badge">四</span>
+              <div>
+                <h2>本日の杯数</h2>
+                <p>最低10杯、最大30杯です。</p>
+              </div>
+            </div>
+            <div class="choice-row" id="cupButtons"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-title">
+              <span class="badge">五</span>
+              <div>
+                <h2>制限時間</h2>
+                <p>1問ごとの持ち時間を選びます。</p>
+              </div>
+            </div>
+            <div class="choice-row time-choice-row" id="timeButtons"></div>
+          </section>
+        </div>
+
+        <section class="panel full-panel">
+          <div class="section-title spread">
+            <div class="title-left">
+              <span class="badge">六</span>
+              <div>
+                <h2>本日の単元表</h2>
+                <p>出題する単元を選べます。別学年の単元も追加できます。</p>
+              </div>
+            </div>
+            <div class="menu-actions">
+              <button class="ghost-button" id="openMenuBtn" type="button">お品書き</button>
+              <button class="ghost-button" id="openSecretMenuBtn" type="button">裏・お品書き</button>
+            </div>
+          </div>
+          <div id="unitGroups" class="unit-groups"></div>
+        </section>
+
+        <section class="start-panel compact-start-panel">
+          <button class="primary-button" id="startBtn" type="button">この注文で開店する</button>
+          <p class="muted">設定を変えたら、そのまま開店できます。</p>
+        </section>
+      </details>
     </section>
 
     <section id="gameScreen" class="screen">
@@ -161,7 +183,7 @@
         <div id="unlockMessage" class="unlock-message"></div>
         <div class="result-actions">
           <button class="primary-button" id="retryBtn" type="button">もう一度食べる</button>
-          <button class="ghost-button" id="statsFromResultBtn" type="button">メニューを見る</button>
+          <button class="ghost-button" id="statsFromResultBtn" type="button">食べ歩き帳を見る</button>
         </div>
       </section>
     </section>
