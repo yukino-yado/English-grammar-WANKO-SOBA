@@ -1885,3 +1885,8 @@ button {
     border-radius: 16px;
   }
 }
+
+/* v2.7: スタート画面を軽くするため、詳細設定の見出しは通常表示しない */
+.settings-summary-hidden {
+  display: none !important;
+}

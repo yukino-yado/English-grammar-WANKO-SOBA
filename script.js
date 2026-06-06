@@ -995,7 +995,6 @@ function renderTeacherSlot() {
     slot.innerHTML = `
       <div class="teacher-empty">
         <strong>まだ先生メニューは届いていません。</strong>
-        <p>教師用アプリで「生徒版へ反映」された問題だけが、ここに表示されます。</p>
       </div>
     `;
   } else {
