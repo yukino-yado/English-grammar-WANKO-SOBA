@@ -2139,37 +2139,90 @@ function openStats() {
   const weakUnits = getWeakUnits(5);
   const unitProgress = getUnitProgress(8);
   const wrongCount = (progress.wrongBank || []).length;
+  const teacherCount = progress.teacherBank?.length || 0;
   const exText = IS_TEACHER_PREVIEW ? "教師確認モード" : (progress.exUnlocked ? "開放済み" : `うめて一杯 ${progress.blankClearCount}/30・書ききり一杯 ${progress.fullClearCount}/10`);
+  const totalAnswers = progress.history.length;
+  const correctAnswers = progress.history.filter(item => item.isCorrect).length;
+  const totalRate = totalAnswers ? Math.round((correctAnswers / totalAnswers) * 100) : 0;
+  const titleText = progress.titles.length ? progress.titles.at(-1) : "見習いそば客";
+  const weakText = weakUnits.length ? weakUnits.map(escapeHtml).join(" / ") : "まだ十分なデータがありません。";
+  const unitText = unitProgress.length ? unitProgress.map(item => `${escapeHtml(item.unit)}：${item.rate}%（${item.total}問）`).join("<br>") : "まだ記録がありません。";
+  const teacherUpdated = progress.teacherPackageUpdatedAt ? new Date(progress.teacherPackageUpdatedAt).toLocaleString("ja-JP") : "未反映";
   $("#modalBody").innerHTML = `
-    <div class="menu-command-grid">
-      <button class="primary-button" id="startReviewBtn" type="button" ${wrongCount ? "" : "disabled"}>おかわり復習をする</button>
-      <button class="ghost-button" id="closeMenuOnlyBtn" type="button">設定へ戻る</button>
-    </div>
-    <p class="muted">おかわり復習は、最近まちがえた問題から最大${state.selectedCups}杯分を出します。</p>
-    <div class="stat-grid">
-      <div class="stat-card"><span>総解答数</span><strong>${progress.history.length}</strong></div>
-      <div class="stat-card"><span>保存された全文問題</span><strong>${progress.solvedBank.length}</strong></div>
-      <div class="stat-card"><span>先生の追加問題</span><strong>${progress.teacherBank?.length || 0}</strong></div>
-      <div class="stat-card"><span>復習待ち</span><strong>${wrongCount}</strong></div>
-      <div class="stat-card"><span>うめて一杯クリア</span><strong>${progress.blankClearCount}/30</strong></div>
-      <div class="stat-card"><span>書ききり一杯クリア</span><strong>${progress.fullClearCount}/10</strong></div>
-      <div class="stat-card"><span>最高連杯</span><strong>${progress.bestStreak || 0}</strong></div>
-      <div class="stat-card"><span>EX</span><strong>${exText}</strong></div>
-    </div>
-    <div class="menu-list" style="margin-top:16px;">
-      ${renderUnderstandingPanel(unitProgress)}
-      <article class="menu-item">
-        <h3>苦手そうな単元</h3>
-        <p>${weakUnits.length ? weakUnits.map(escapeHtml).join(" / ") : "まだ十分なデータがありません。"}</p>
-      </article>
-      <article class="menu-item">
-        <h3>単元別達成率</h3>
-        <p>${unitProgress.length ? unitProgress.map(item => `${escapeHtml(item.unit)}：${item.rate}%（${item.total}問）`).join("<br>") : "まだ記録がありません。"}</p>
-      </article>
-      <article class="menu-item">
-        <h3>称号</h3>
-        <p>${progress.titles.map(escapeHtml).join(" / ")}</p>
-      </article>
+    <div class="menu-hub">
+      <section class="menu-hero-card">
+        <div>
+          <p class="menu-hero-kicker">本日のようす</p>
+          <h3>${escapeHtml(titleText)}</h3>
+          <p>理解度 ${totalRate}%・最高 ${progress.bestStreak || 0}連杯</p>
+        </div>
+        <div class="mini-donut" style="--rate:${totalRate}">
+          <div><strong>${totalRate}%</strong><span>理解度</span></div>
+        </div>
+      </section>
+
+      <section class="menu-section-card menu-primary-actions">
+        <div class="menu-section-head">
+          <span class="menu-section-icon">🍜</span>
+          <div><h3>すぐ使う</h3><p>復習・設定に戻る操作をまとめています。</p></div>
+        </div>
+        <div class="menu-action-list">
+          <button class="menu-action-button primary" id="startReviewBtn" type="button" ${wrongCount ? "" : "disabled"}>
+            <span>おかわり復習</span><small>${wrongCount ? `復習待ち ${wrongCount}問` : "復習待ちはありません"}</small>
+          </button>
+          <button class="menu-action-button" id="closeMenuOnlyBtn" type="button">
+            <span>設定へ戻る</span><small>単元・杯数・時間を選び直します</small>
+          </button>
+        </div>
+      </section>
+
+      <details class="menu-section-card" open>
+        <summary><span class="menu-section-icon">📊</span><span>学習の進み具合</span></summary>
+        <div class="menu-mini-grid">
+          <div class="menu-mini-card"><span>総解答数</span><strong>${totalAnswers}</strong></div>
+          <div class="menu-mini-card"><span>復習待ち</span><strong>${wrongCount}</strong></div>
+          <div class="menu-mini-card"><span>保存英文</span><strong>${progress.solvedBank.length}</strong></div>
+          <div class="menu-mini-card"><span>先生の一杯</span><strong>${teacherCount}</strong></div>
+        </div>
+      </details>
+
+      <details class="menu-section-card">
+        <summary><span class="menu-section-icon">🔓</span><span>解放状況</span></summary>
+        <div class="menu-mini-grid">
+          <div class="menu-mini-card"><span>うめて一杯</span><strong>${progress.blankClearCount}/30</strong></div>
+          <div class="menu-mini-card"><span>書ききり一杯</span><strong>${progress.fullClearCount}/10</strong></div>
+          <div class="menu-mini-card wide"><span>EX</span><strong>${escapeHtml(exText)}</strong></div>
+        </div>
+      </details>
+
+      <details class="menu-section-card" open>
+        <summary><span class="menu-section-icon">🥢</span><span>理解度</span></summary>
+        ${renderUnderstandingPanel(unitProgress)}
+      </details>
+
+      <details class="menu-section-card">
+        <summary><span class="menu-section-icon">📚</span><span>単元の様子</span></summary>
+        <div class="menu-info-block">
+          <h4>苦手そうな単元</h4>
+          <p>${weakText}</p>
+        </div>
+        <div class="menu-info-block">
+          <h4>単元別達成率</h4>
+          <p>${unitText}</p>
+        </div>
+      </details>
+
+      <details class="menu-section-card">
+        <summary><span class="menu-section-icon">🏷️</span><span>称号・先生メニュー</span></summary>
+        <div class="menu-info-block">
+          <h4>称号</h4>
+          <p>${progress.titles.map(escapeHtml).join(" / ") || "まだ称号はありません。"}</p>
+        </div>
+        <div class="menu-info-block">
+          <h4>先生からの一杯</h4>
+          <p>追加問題：${teacherCount}問<br>最終反映：${escapeHtml(teacherUpdated)}</p>
+        </div>
+      </details>
     </div>
   `;
   $("#modal").showModal();

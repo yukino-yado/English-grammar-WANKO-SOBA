@@ -1457,3 +1457,281 @@ button {
   color: var(--muted);
   font-size: 0.78rem;
 }
+
+/* v2.5: menu grouping like the shutter app */
+.menu-hub {
+  display: grid;
+  gap: 14px;
+}
+
+.menu-hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #fff5dc, #fffaf0 45%, #ffe8d1);
+  border: 1px solid rgba(178, 70, 46, 0.18);
+  box-shadow: 0 10px 24px rgba(88, 55, 24, 0.08);
+}
+
+.menu-hero-kicker {
+  margin: 0 0 4px;
+  color: var(--accent-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.menu-hero-card h3 {
+  margin: 0 0 4px;
+  font-size: 1.35rem;
+}
+
+.menu-hero-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.mini-donut {
+  --rate: 0;
+  width: 86px;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--accent) calc(var(--rate) * 1%), #eadcc6 0);
+  box-shadow: inset 0 0 0 1px rgba(88, 55, 24, 0.08), 0 8px 18px rgba(88, 55, 24, 0.08);
+}
+
+.mini-donut > div {
+  width: 58px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  background: var(--panel);
+  border: 1px solid rgba(88, 55, 24, 0.08);
+}
+
+.mini-donut strong {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.mini-donut span {
+  margin-top: 3px;
+  font-size: 0.64rem;
+  color: var(--muted);
+}
+
+.menu-section-card {
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 250, 240, 0.86);
+  overflow: hidden;
+}
+
+.menu-section-card > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 16px;
+  cursor: pointer;
+  font-weight: 900;
+  color: var(--ink);
+  background: linear-gradient(135deg, rgba(255,255,255,.7), rgba(255,244,221,.75));
+}
+
+.menu-section-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-section-card > summary::after {
+  content: "開く";
+  margin-left: auto;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.menu-section-card[open] > summary::after {
+  content: "閉じる";
+}
+
+.menu-section-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 10px rgba(88,55,24,.06);
+}
+
+.menu-section-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 16px 8px;
+}
+
+.menu-section-head h3 {
+  margin: 0 0 3px;
+}
+
+.menu-section-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.92rem;
+}
+
+.menu-action-list {
+  display: grid;
+  gap: 10px;
+  padding: 8px 16px 16px;
+}
+
+.menu-action-button {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  color: var(--ink);
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(88,55,24,.06);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+
+.menu-action-button span {
+  display: block;
+  font-weight: 900;
+  font-size: 1rem;
+}
+
+.menu-action-button small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.menu-action-button.primary {
+  background: linear-gradient(135deg, var(--accent), #f2ae57);
+  color: #fff;
+  border: none;
+}
+
+.menu-action-button.primary small {
+  color: rgba(255,255,255,.88);
+}
+
+.menu-action-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(88,55,24,.12);
+}
+
+.menu-action-button:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.menu-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+  padding: 14px 16px 16px;
+}
+
+.menu-mini-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 13px;
+}
+
+.menu-mini-card.wide {
+  grid-column: 1 / -1;
+}
+
+.menu-mini-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.menu-mini-card strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 1.35rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.menu-info-block {
+  margin: 14px 16px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.menu-info-block h4 {
+  margin: 0 0 6px;
+}
+
+.menu-info-block p {
+  margin: 0;
+  line-height: 1.75;
+  color: var(--muted);
+}
+
+.menu-section-card .understanding-panel {
+  border: 0;
+  background: transparent;
+  padding: 0 16px 16px;
+}
+
+.menu-section-card .understanding-panel h3 {
+  display: none;
+}
+
+.menu-section-card .donut-grid {
+  margin-top: 0;
+}
+
+@media (max-width: 560px) {
+  .menu-hero-card {
+    align-items: flex-start;
+  }
+
+  .mini-donut {
+    width: 72px;
+  }
+
+  .mini-donut > div {
+    width: 50px;
+  }
+
+  .menu-mini-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .menu-section-card > summary {
+    padding: 14px;
+  }
+}
