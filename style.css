@@ -1890,3 +1890,93 @@ button {
 .settings-summary-hidden {
   display: none !important;
 }
+
+/* v2.8: 食べ歩き帳の理解度を整理 */
+.donut-grid.overall-only {
+  grid-template-columns: minmax(180px, 260px);
+  justify-content: center;
+}
+
+.unit-understanding-box {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 250, 240, 0.72);
+}
+
+.unit-understanding-box h4 {
+  margin: 0 0 10px;
+  font-size: 0.98rem;
+}
+
+.unit-understanding-list {
+  display: grid;
+  gap: 10px;
+}
+
+.unit-understanding-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.3fr) minmax(90px, 2fr) 48px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(110, 75, 30, 0.12);
+}
+
+.unit-understanding-label {
+  min-width: 0;
+}
+
+.unit-understanding-label strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.92rem;
+}
+
+.unit-understanding-label span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.unit-understanding-track {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #eadcc6;
+  box-shadow: inset 0 0 0 1px rgba(88, 55, 24, 0.08);
+}
+
+.unit-understanding-track span {
+  display: block;
+  height: 100%;
+  width: calc(var(--rate) * 1%);
+  min-width: 4px;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.unit-understanding-row b {
+  text-align: right;
+  font-size: 0.94rem;
+}
+
+.unit-understanding-empty {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .unit-understanding-row {
+    grid-template-columns: 1fr 46px;
+  }
+  .unit-understanding-track {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

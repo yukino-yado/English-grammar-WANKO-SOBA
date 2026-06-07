@@ -1025,8 +1025,9 @@ function normalizeTeacherQuestion(item, index = 0) {
   if (!item || typeof item !== "object") return null;
   const jp = sanitizeJapanese(item.jp || item.japanese || "").trim();
   const fullSentence = ensurePunctuation(item.fullSentence || item.en || item.english || "");
-  const blankSentence = item.blankSentence || item.blank || "";
   const blankAnswer = item.blankAnswer || item.answer || "";
+  const rawBlankSentence = item.blankSentence || item.blank || "";
+  const blankSentence = expandBlankSlotsForAnswer(rawBlankSentence, blankAnswer);
   if (!jp || !fullSentence || !blankSentence || !blankAnswer) return null;
   const grade = Number(item.grade || state.selectedGrade || 1);
   const level = item.level && LEVELS[item.level] ? item.level : "medium";
@@ -1643,15 +1644,39 @@ function renderDonutChart(rate, label, subText) {
   `;
 }
 
+function renderUnitUnderstandingList(unitProgress) {
+  if (!unitProgress.length) {
+    return `<p class="muted unit-understanding-empty">単元別の理解度は、解答記録が増えると表示されます。</p>`;
+  }
+  return `
+    <div class="unit-understanding-list">
+      ${unitProgress.map(item => `
+        <div class="unit-understanding-row">
+          <div class="unit-understanding-label">
+            <strong>${escapeHtml(item.unit)}</strong>
+            <span>${item.total}問</span>
+          </div>
+          <div class="unit-understanding-track" aria-label="${escapeHtml(item.unit)} ${item.rate}%">
+            <span style="--rate:${item.rate};"></span>
+          </div>
+          <b>${item.rate}%</b>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderUnderstandingPanel(unitProgress) {
   const overall = getOverallStats();
-  const unitDonuts = unitProgress.slice(0, 3).map(item => renderDonutChart(item.rate, item.unit, `${item.total}問の記録`)).join("");
   return `
     <article class="menu-item understanding-panel">
       <h3>理解度</h3>
-      <div class="donut-grid">
+      <div class="donut-grid overall-only">
         ${renderDonutChart(overall.rate, "全体", `${overall.correct}/${overall.total || 0}問 正解`)}
-        ${unitDonuts || `<p class="muted">単元別の円グラフは、解答記録が増えると表示されます。</p>`}
+      </div>
+      <div class="unit-understanding-box">
+        <h4>単元別理解度</h4>
+        ${renderUnitUnderstandingList(unitProgress)}
       </div>
     </article>
   `;
@@ -26571,6 +26596,20 @@ function makeCoreBlank(phrase) {
   return tokenize(phrase).map(() => "___").join(" ");
 }
 
+function countBlankSlots(sentence) {
+  return (String(sentence || "").match(/___/g) || []).length;
+}
+
+function expandBlankSlotsForAnswer(sentence, answer) {
+  const text = String(sentence || "");
+  const answerCount = tokenize(answer).length;
+  const blankCount = countBlankSlots(text);
+  if (!answerCount || blankCount >= answerCount) return text;
+  if (!blankCount) return text;
+  const extraCount = answerCount - blankCount + 1;
+  return text.replace("___", Array.from({ length: extraCount }, () => "___").join(" "));
+}
+
 function escapeRegExp(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -26658,7 +26697,8 @@ function enforceCoreBlankPolicy(question) {
 
 function baseQuestion({ unit, grade, level, jp, fullSentence, blankAnswer, explanation, blankSentence, choices, teacherMade = false }) {
   const answerTokens = tokenize(blankAnswer);
-  const sentence = blankSentence || fullSentence.replace(blankAnswer, answerTokens.map(() => "___").join(" "));
+  const rawSentence = blankSentence || fullSentence.replace(blankAnswer, answerTokens.map(() => "___").join(" "));
+  const sentence = expandBlankSlotsForAnswer(rawSentence, blankAnswer);
   const cleanJp = sanitizeJapanese(jp);
   const base = {
     id: `q-${hashCode(`${unit}|${cleanJp}|${fullSentence}|${Math.random()}`)}`,
@@ -26674,6 +26714,7 @@ function baseQuestion({ unit, grade, level, jp, fullSentence, blankAnswer, expla
     teacherMade
   };
   const core = enforceCoreBlankPolicy(base);
+  core.blankSentence = expandBlankSlotsForAnswer(core.blankSentence, core.blankAnswer);
   if (!teacherMade && core.blankAnswer !== base.blankAnswer) {
     core.explanation = alignGeneratedExplanation(explanation, core.blankAnswer);
   }
