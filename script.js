@@ -26606,8 +26606,18 @@ function expandBlankSlotsForAnswer(sentence, answer) {
   const blankCount = countBlankSlots(text);
   if (!answerCount || blankCount >= answerCount) return text;
   if (!blankCount) return text;
-  const extraCount = answerCount - blankCount + 1;
-  return text.replace("___", Array.from({ length: extraCount }, () => "___").join(" "));
+
+  // 複数語の答えに対して空欄数が足りない場合は、
+  // 文頭の助動詞・be動詞側ではなく、基本的に最後の空欄を広げる。
+  // 例：___ he ___ music? / Does listen to
+  // → ___ he ___ ___ music?
+  // 例：I was ___ ___ music. / not listening to
+  // → I was ___ ___ ___ music.
+  const blanksToPutInLastSlot = answerCount - blankCount + 1;
+  const expandedBlank = Array.from({ length: blanksToPutInLastSlot }, () => "___").join(" ");
+  const lastBlankIndex = text.lastIndexOf("___");
+  if (lastBlankIndex < 0) return text;
+  return `${text.slice(0, lastBlankIndex)}${expandedBlank}${text.slice(lastBlankIndex + 3)}`;
 }
 
 function escapeRegExp(text) {
@@ -26644,6 +26654,43 @@ function enforceCoreBlankPolicy(question) {
   if (!question || question.teacherMade) return question;
   const unit = String(question.unit || "");
   const full = String(question.fullSentence || "");
+
+  // 不定詞・動名詞では、主語や周辺語ではなく、必ず文法の核を問う。
+  // 不定詞：to + 動詞の原形（listen to のような動詞＋前置詞は語数分の空欄）
+  // 動名詞：動詞ing、または finished/enjoyed などの過去形 + 動詞ing
+  if (unit === "不定詞・動名詞") {
+    const basePhrases = [
+      "study", "read", "play", "watch", "listen to", "help", "visit", "use",
+      "clean", "cook", "get up", "speak", "drink", "be", "run", "take", "go", "make"
+    ];
+    const gerundPhrases = [
+      "studying", "reading", "playing", "watching", "listening to", "helping", "visiting", "using",
+      "cleaning", "cooking", "getting up", "speaking", "drinking", "being", "running", "taking", "going", "making"
+    ];
+
+    const candidates = [];
+    for (const base of basePhrases) {
+      candidates.push({ phrase: `to ${base}`, choices: ["to", ...tokenize(base), ...gerundPhrases.flatMap(tokenize)] });
+      candidates.push({ phrase: `To ${base}`, choices: ["To", ...tokenize(base), ...gerundPhrases.flatMap(tokenize)] });
+    }
+
+    for (const gerund of gerundPhrases) {
+      // 「I like reading books.」のような文では reading を問う。
+      candidates.push({ phrase: gerund, choices: [...tokenize(gerund), "to", ...basePhrases.flatMap(tokenize)] });
+      candidates.push({ phrase: cap(gerund), choices: [cap(tokenize(gerund)[0]), ...tokenize(gerund).slice(1), "To", ...basePhrases.flatMap(tokenize)] });
+
+      // 「I finished cooking dinner.」のような文では finished cooking をまとめて問う。
+      for (const pastVerb of ["finished", "enjoyed", "liked", "started", "stopped", "practiced"]) {
+        candidates.push({ phrase: `${pastVerb} ${gerund}`, choices: [pastVerb, ...tokenize(gerund), "finish", "enjoy", "like", "start", "stop", "practice"] });
+      }
+    }
+
+    // 長い句を優先。例：to listen to を to listen より先に見る。
+    const hit = candidates
+      .sort((a, b) => tokenize(b.phrase).length - tokenize(a.phrase).length)
+      .find(p => hasCorePhrase(full, p.phrase));
+    if (hit) return applyCoreBlank(question, hit.phrase, hit.choices);
+  }
 
   // that節は、that だけではなく「気持ち・判断・発言 + that」までを核として問う。
   // 例：I am glad that... → I am ___ ___ ... / 答え：glad that
