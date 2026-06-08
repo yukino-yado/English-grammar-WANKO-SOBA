@@ -1,6 +1,7 @@
 "use strict";
 
 const TEACHER_PACKAGE_KEY = "wankoSobaTeacherPackage:v1";
+const STUDENT_PROGRESS_KEY = "wankoSobaGrammarProgress:v5";
 
 const GRAMMAR_UNITS = {
   1: [
@@ -103,13 +104,78 @@ function getEditMap() {
   return new Map((teacherPackage.editedQuestions || []).map(item => [item.key, item]));
 }
 
+function getStudentProgress() {
+  try {
+    const raw = localStorage.getItem(STUDENT_PROGRESS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    console.warn("生徒側の生成済み問題を読み込めませんでした。", error);
+    return {};
+  }
+}
+
+function getGeneratedQuestionRows() {
+  const progress = getStudentProgress();
+  const sources = [
+    ...(Array.isArray(progress.history) ? progress.history : []),
+    ...(Array.isArray(progress.solvedBank) ? progress.solvedBank : []),
+    ...(Array.isArray(progress.wrongBank) ? progress.wrongBank : [])
+  ];
+  const map = new Map();
+  sources.forEach((item, index) => {
+    if (!item || typeof item !== "object") return;
+    const jp = sanitizeJapanese(String(item.jp || "").trim());
+    const fullSentence = normalizeEnglish(String(item.fullSentence || "").trim());
+    const unit = String(item.unit || "").trim();
+    if (!jp || !fullSentence || !unit) return;
+    const grade = Math.min(3, Math.max(1, Number(item.grade || findGradeByUnit(unit) || 1)));
+    const key = `generated::${hashCode(`${unit}|${jp}|${fullSentence}`)}`;
+    if (map.has(key)) return;
+    map.set(key, {
+      key,
+      grade,
+      unit,
+      sourceIndex: index,
+      levelScope: item.level || "generated",
+      jp,
+      fullSentence,
+      blankSentence: item.blankSentence || "生成済み問題のため、必要に応じて生徒側で自動調整されます。",
+      blankAnswer: item.blankAnswer || "",
+      explanation: item.explanation || "生成済み問題です。日本語文と英文の自然さを確認してください。",
+      generatedStored: true
+    });
+  });
+  return [...map.values()];
+}
+
+function findGradeByUnit(unit) {
+  for (const [grade, units] of Object.entries(GRAMMAR_UNITS)) {
+    if (units.includes(unit)) return Number(grade);
+  }
+  return null;
+}
+
+function getEditorQuestionRows() {
+  const base = Array.isArray(window.EDITOR_QUESTION_INDEX) ? window.EDITOR_QUESTION_INDEX : [];
+  const generated = getGeneratedQuestionRows();
+  const seen = new Set(base.map(row => `${row.unit}::${normalizeText(row.fullSentence)}`));
+  const merged = [...base];
+  generated.forEach(row => {
+    const naturalKey = `${row.unit}::${normalizeText(row.fullSentence)}`;
+    if (seen.has(naturalKey)) return;
+    seen.add(naturalKey);
+    merged.push(row);
+  });
+  return merged;
+}
+
 function renderList() {
   const grade = Number($("#editorGrade").value || 1);
   const unit = $("#editorUnit").value;
   const query = normalizeText($("#editorSearch").value || "");
   const edits = getEditMap();
 
-  visibleRows = (window.EDITOR_QUESTION_INDEX || [])
+  visibleRows = getEditorQuestionRows()
     .filter(row => Number(row.grade) === grade && row.unit === unit)
     .filter(row => {
       if (!query) return true;
@@ -137,12 +203,12 @@ function renderList() {
     return `
       <article class="editor-question-card ${edited ? "is-edited" : ""}" data-key="${escapeHtml(row.key)}">
         <div class="editor-card-head">
-          <span class="shelf-mark">基準問題 ${index + 1}</span>
+          <span class="shelf-mark">${row.generatedStored ? "生成済み問題" : "基準問題"} ${index + 1}</span>
           ${edited ? `<span class="edit-badge">編集済み</span>` : `<span class="edit-badge muted-badge">未編集</span>`}
         </div>
         <div class="editor-original-box">
-          <p><strong>元の日本語：</strong>${escapeHtml(row.jp)}</p>
-          <p><strong>元の英文：</strong>${escapeHtml(row.fullSentence)}</p>
+          <p><strong>${row.generatedStored ? "生成時の日本語" : "元の日本語"}：</strong>${escapeHtml(row.jp)}</p>
+          <p><strong>${row.generatedStored ? "生成時の英文" : "元の英文"}：</strong>${escapeHtml(row.fullSentence)}</p>
         </div>
         <div class="editor-input-grid">
           <label>日本語文
@@ -263,6 +329,16 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function hashCode(value) {
+  let hash = 0;
+  const text = String(value || "");
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
 }
 
 document.addEventListener("DOMContentLoaded", init);

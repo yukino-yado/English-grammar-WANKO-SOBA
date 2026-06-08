@@ -1259,11 +1259,14 @@ function getFullWritingQuestions(count) {
   });
 
   const pool = bank.length ? bank : progress.solvedBank;
-  return shuffle(pool).slice(0, count).map(q => ({
-    ...q,
-    id: `full-${q.id || hashCode(q.fullSentence)}-${Date.now()}-${Math.random()}`,
-    modeSource: q.modeSource || "past"
-  }));
+  return shuffle(pool).slice(0, count).map(q => {
+    const edited = applyEditedQuestionOverride(q);
+    return {
+      ...edited,
+      id: `full-${edited.id || hashCode(edited.fullSentence)}-${Date.now()}-${Math.random()}`,
+      modeSource: edited.modeSource || "past"
+    };
+  });
 }
 
 function renderQuestion() {
