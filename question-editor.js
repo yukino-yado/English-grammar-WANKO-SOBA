@@ -28,6 +28,8 @@ const LEVEL_LABELS = {
   generated: "生成済み"
 };
 
+const EDITOR_LEVELS = ["small", "medium", "large", "extra"];
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -71,10 +73,13 @@ function normalizeEdit(item) {
   const jp = sanitizeJapanese(String(item.jp || "").trim());
   const fullSentence = normalizeEnglish(String(item.fullSentence || "").trim());
   if (!key || !jp || !fullSentence) return null;
+  const levelScope = item.levelScope || item.level || null;
   return {
     key,
     grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
     unit: String(item.unit || ""),
+    level: levelScope || null,
+    levelScope,
     jp,
     fullSentence,
     originalJp: String(item.originalJp || ""),
@@ -226,18 +231,40 @@ function findGradeByUnit(unit) {
   return null;
 }
 
+function buildStaticHomeGeneratedRows() {
+  const base = Array.isArray(window.EDITOR_QUESTION_INDEX) ? window.EDITOR_QUESTION_INDEX : [];
+  const rows = [];
+  base.forEach(row => {
+    if (!row || !row.unit || !row.jp || !row.fullSentence) return;
+    EDITOR_LEVELS.forEach(level => {
+      rows.push({
+        ...row,
+        key: `home-generated::${level}::${row.key || hashCode(`${row.unit}|${row.jp}|${row.fullSentence}`)}`,
+        id: `home-generated::${level}::${row.key || hashCode(`${row.unit}|${row.jp}|${row.fullSentence}`)}`,
+        level,
+        levelScope: level,
+        generatedStored: true,
+        preGenerated: true,
+        generatedAtHome: true,
+        explanation: row.explanation || "ホーム画面で事前生成される問題です。日本語文と英文の自然さを確認してください。"
+      });
+    });
+  });
+  return rows;
+}
+
 function getEditorQuestionRows() {
   const base = Array.isArray(window.EDITOR_QUESTION_INDEX) ? window.EDITOR_QUESTION_INDEX : [];
   const generated = getGeneratedQuestionRows();
-  const seen = new Set(base.map(row => `${row.unit}::${normalizeText(row.fullSentence)}`));
-  const merged = [...base];
-  generated.forEach(row => {
-    const naturalKey = `${row.unit}::${normalizeText(row.fullSentence)}`;
-    if (seen.has(naturalKey)) return;
-    seen.add(naturalKey);
-    merged.push(row);
+  const staticGenerated = buildStaticHomeGeneratedRows();
+  const merged = [...base, ...generated, ...staticGenerated];
+  const map = new Map();
+  merged.forEach(row => {
+    if (!row || !row.key) return;
+    if (map.has(row.key)) return;
+    map.set(row.key, row);
   });
-  return merged;
+  return [...map.values()];
 }
 
 function clearEditorResults() {
@@ -356,6 +383,8 @@ function saveVisibleEdits() {
       key,
       grade: row.grade,
       unit: row.unit,
+      level: row.levelScope || row.level || null,
+      levelScope: row.levelScope || row.level || null,
       jp,
       fullSentence,
       originalJp: row.jp,

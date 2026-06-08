@@ -62,8 +62,8 @@ const TEACHER_UNIT_NAME = "先生からの一杯";
 const TEACHER_UNIT_PREFIX = "teacher-unit::";
 const IS_TEACHER_PREVIEW = new URLSearchParams(location.search).has("teacherPreview") || location.hash.includes("teacherPreview");
 const REVIEW_STYLE_UNITS = new Set(["be動詞のまとめ", "一般動詞の文のまとめ"]);
-const PREGENERATED_BANK_VERSION = "v3.5-selection-rule-bank";
-const PREGENERATED_PER_UNIT_LEVEL = 14;
+const PREGENERATED_BANK_VERSION = "v3.6-all-level-home-bank";
+const PREGENERATED_PER_UNIT_LEVEL = 24;
 const PREGENERATED_LEVELS = ["small", "medium", "large", "extra"];
 
 const GRAMMAR_UNITS = {
@@ -1089,10 +1089,13 @@ function normalizeEditedQuestion(item) {
   const jp = sanitizeJapanese(String(item.jp || "").trim());
   const fullSentence = ensurePunctuation(String(item.fullSentence || "").replace(/。/g, "").replace(/\s+/g, " ").trim());
   if (!key || !jp || !fullSentence) return null;
+  const levelScope = item.levelScope || item.level || null;
   return {
     key,
     grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
     unit: String(item.unit || ""),
+    level: levelScope || null,
+    levelScope,
     jp,
     fullSentence,
     originalJp: String(item.originalJp || ""),
@@ -1106,12 +1109,26 @@ function buildBankQuestionKey(unit, index) {
   return `bank::${unit}::${index}`;
 }
 
+function editLevelMatchesQuestion(edit, question) {
+  const editLevel = edit.levelScope || edit.level || null;
+  if (!editLevel || editLevel === "all") return true;
+  const questionLevel = question.levelScope || question.level || state.selectedLevel || null;
+  if (!questionLevel) return true;
+  if (Array.isArray(editLevel)) return editLevel.includes(questionLevel) || editLevel.includes("all");
+  return String(editLevel).split(/[ ,/|]+/).includes(String(questionLevel));
+}
+
 function applyEditedQuestionOverride(question) {
   const edits = Array.isArray(progress.editedQuestions) ? progress.editedQuestions : [];
   if (!edits.length || !question) return question;
   const sourceKey = question.sourceKey || "";
-  const byKey = sourceKey ? edits.find(item => item.key === sourceKey) : null;
-  const byOriginal = edits.find(item => item.originalFullSentence && normalize(item.originalFullSentence) === normalize(question.fullSentence));
+  const byKey = sourceKey ? edits.find(item => item.key === sourceKey && editLevelMatchesQuestion(item, question)) : null;
+  const byOriginal = edits.find(item => {
+    if (!item.originalFullSentence) return false;
+    if (item.unit && question.unit && item.unit !== question.unit) return false;
+    if (!editLevelMatchesQuestion(item, question)) return false;
+    return normalize(item.originalFullSentence) === normalize(question.fullSentence);
+  });
   const edit = byKey || byOriginal;
   if (!edit) return question;
   return {
