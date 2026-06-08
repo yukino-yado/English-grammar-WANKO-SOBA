@@ -108,8 +108,15 @@
 }
 .question-editor-shell .editor-filter-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+.question-editor-shell .editor-search-field {
+  grid-column: span 1;
+}
+.level-mark {
+  background: rgba(55, 96, 94, 0.12);
+  color: #315b58;
 }
 .editor-question-list {
   display: grid;

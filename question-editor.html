@@ -42,21 +42,31 @@
         <span class="badge">探</span>
         <div>
           <h2>単元を選ぶ</h2>
-          <p>学年・単元を選んで、問題文をまとめて確認します。</p>
+          <p>難易度・学年・単元を選び、必要なら検索語を入れてから「検索する」を押してください。</p>
         </div>
       </div>
       <div class="editor-filter-grid">
+        <label>難易度
+          <select id="editorLevel">
+            <option value="all">すべて</option>
+            <option value="small">小盛り</option>
+            <option value="medium">中盛り</option>
+            <option value="large">大盛り</option>
+            <option value="extra">特盛り</option>
+          </select>
+        </label>
         <label>学年
           <select id="editorGrade"></select>
         </label>
         <label>単元
           <select id="editorUnit"></select>
         </label>
-        <label>検索
+        <label class="editor-search-field">検索（任意）
           <input id="editorSearch" type="search" placeholder="日本語・英文で検索">
         </label>
       </div>
       <div class="teacher-action-row compact">
+        <button class="primary-button" id="editorSearchBtn" type="button">検索する</button>
         <button class="ghost-button" id="resetVisibleBtn" type="button">表示中の編集を戻す</button>
         <button class="ghost-button" id="exportEditorBtn" type="button">配布用データを作る</button>
       </div>
@@ -69,7 +79,7 @@
           <span class="badge">棚</span>
           <div>
             <h2 id="editorListTitle">問題一覧</h2>
-            <p id="editorListSummary">単元を選んでください。</p>
+            <p id="editorListSummary">条件を選んで「検索する」を押してください。</p>
           </div>
         </div>
       </div>

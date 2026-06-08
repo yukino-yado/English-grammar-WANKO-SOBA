@@ -18,16 +18,26 @@ const GRAMMAR_UNITS = {
   ]
 };
 
+const LEVEL_LABELS = {
+  all: "すべて",
+  small: "小盛り",
+  medium: "中盛り",
+  large: "大盛り",
+  extra: "特盛り",
+  generated: "生成済み"
+};
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 let teacherPackage = loadPackage();
 let visibleRows = [];
+let hasSearched = false;
 
 function init() {
   populateFilters();
   bindEvents();
-  renderList();
+  clearEditorResults();
 }
 
 function loadPackage() {
@@ -85,10 +95,20 @@ function populateFilters() {
 function bindEvents() {
   $("#editorGrade").addEventListener("change", () => {
     updateUnitOptions();
-    renderList();
+    clearEditorResults();
   });
-  $("#editorUnit").addEventListener("change", renderList);
-  $("#editorSearch").addEventListener("input", renderList);
+  $("#editorLevel").addEventListener("change", clearEditorResults);
+  $("#editorUnit").addEventListener("change", clearEditorResults);
+  $("#editorSearch").addEventListener("input", () => {
+    showMessage("条件を変更しました。検索する場合は「検索する」を押してください。");
+  });
+  $("#editorSearchBtn").addEventListener("click", searchEditorQuestions);
+  $("#editorSearch").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchEditorQuestions();
+    }
+  });
   $("#saveVisibleBtn").addEventListener("click", saveVisibleEdits);
   $("#resetVisibleBtn").addEventListener("click", resetVisibleEdits);
   $("#exportEditorBtn").addEventListener("click", exportPackage);
@@ -169,14 +189,40 @@ function getEditorQuestionRows() {
   return merged;
 }
 
+function clearEditorResults() {
+  const grade = Number($("#editorGrade").value || 1);
+  const unit = $("#editorUnit").value || "単元未選択";
+  const level = $("#editorLevel").value || "all";
+  hasSearched = false;
+  visibleRows = [];
+  $("#editorListTitle").textContent = `中${grade}　${unit}`;
+  $("#editorListSummary").textContent = `難易度：${LEVEL_LABELS[level] || level}。条件を選んで「検索する」を押してください。`;
+  $("#editorQuestionList").innerHTML = `<div class="empty-suggestions">まだ検索していません。難易度・学年・単元を選び、必要なら検索語を入力してから「検索する」を押してください。</div>`;
+}
+
+function searchEditorQuestions() {
+  hasSearched = true;
+  renderList();
+}
+
+function matchesLevel(row, selectedLevel) {
+  if (!selectedLevel || selectedLevel === "all") return true;
+  const scope = row.levelScope || row.level || "all";
+  if (scope === "all") return true;
+  if (Array.isArray(scope)) return scope.includes(selectedLevel) || scope.includes("all");
+  return String(scope).split(/[ ,/|]+/).includes(selectedLevel);
+}
+
 function renderList() {
   const grade = Number($("#editorGrade").value || 1);
   const unit = $("#editorUnit").value;
+  const level = $("#editorLevel").value || "all";
   const query = normalizeText($("#editorSearch").value || "");
   const edits = getEditMap();
 
   visibleRows = getEditorQuestionRows()
     .filter(row => Number(row.grade) === grade && row.unit === unit)
+    .filter(row => matchesLevel(row, level))
     .filter(row => {
       if (!query) return true;
       const edit = edits.get(row.key);
@@ -187,11 +233,12 @@ function renderList() {
 
   $("#editorListTitle").textContent = `中${grade}　${unit}`;
   const editedCount = visibleRows.filter(row => edits.has(row.key)).length;
-  $("#editorListSummary").textContent = `${visibleRows.length}問を表示中。編集済み ${editedCount}問。`;
+  const searchText = query ? ` / 検索：「${$("#editorSearch").value.trim()}」` : "";
+  $("#editorListSummary").textContent = `難易度：${LEVEL_LABELS[level] || level}${searchText}。${visibleRows.length}問を表示中。編集済み ${editedCount}問。`;
 
   const list = $("#editorQuestionList");
   if (!visibleRows.length) {
-    list.innerHTML = `<div class="empty-suggestions">表示できる問題がありません。</div>`;
+    list.innerHTML = `<div class="empty-suggestions">該当する問題がありません。</div>`;
     return;
   }
 
@@ -204,6 +251,7 @@ function renderList() {
       <article class="editor-question-card ${edited ? "is-edited" : ""}" data-key="${escapeHtml(row.key)}">
         <div class="editor-card-head">
           <span class="shelf-mark">${row.generatedStored ? "生成済み問題" : "基準問題"} ${index + 1}</span>
+          <span class="shelf-mark level-mark">難易度：${escapeHtml(getLevelLabel(row.levelScope || row.level || "all"))}</span>
           ${edited ? `<span class="edit-badge">編集済み</span>` : `<span class="edit-badge muted-badge">未編集</span>`}
         </div>
         <div class="editor-original-box">
@@ -298,6 +346,12 @@ function exportPackage() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function getLevelLabel(scope) {
+  if (Array.isArray(scope)) return scope.map(item => LEVEL_LABELS[item] || item).join("・");
+  if (!scope || scope === "all") return "すべて";
+  return String(scope).split(/[ ,/|]+/).map(item => LEVEL_LABELS[item] || item).join("・");
 }
 
 function normalizeEnglish(value) {
