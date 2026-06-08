@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>英文法わんこそば 問題編集</title>
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/teacher.css" />
+</head>
+<body>
+  <div class="bg-steam steam-a"></div>
+  <div class="bg-steam steam-b"></div>
+
+  <main class="app-shell teacher-shell question-editor-shell">
+    <header class="hero teacher-hero">
+      <div>
+        <p class="shop-label">教師用管理処</p>
+        <h1>問題を編集する</h1>
+        <p class="subtitle">既存問題も含め、全単元の日本語文と英文だけを編集します。穴埋め・答え・選択肢・解説は自動生成側の形を保ちます。</p>
+      </div>
+      <div class="teacher-header-actions">
+        <a class="ghost-button" href="/teacher.html">教師用へ戻る</a>
+        <a class="ghost-button" href="/index.html?teacherPreview=1">生徒用を確認</a>
+      </div>
+    </header>
+
+    <section class="panel teacher-wide-card editor-guide-card">
+      <div class="section-title spread">
+        <div class="title-left">
+          <span class="badge">編</span>
+          <div>
+            <h2>編集の方針</h2>
+            <p>ここで直した問題は上書き扱いになります。編集済み問題と追加問題は、教師側のシステム上で強調され、自動生成時の参考データとして扱われます。</p>
+          </div>
+        </div>
+        <button class="primary-button" id="saveVisibleBtn" type="button">表示中の編集を保存</button>
+      </div>
+    </section>
+
+    <section class="panel teacher-wide-card">
+      <div class="section-title">
+        <span class="badge">探</span>
+        <div>
+          <h2>単元を選ぶ</h2>
+          <p>学年・単元を選んで、問題文をまとめて確認します。</p>
+        </div>
+      </div>
+      <div class="editor-filter-grid">
+        <label>学年
+          <select id="editorGrade"></select>
+        </label>
+        <label>単元
+          <select id="editorUnit"></select>
+        </label>
+        <label>検索
+          <input id="editorSearch" type="search" placeholder="日本語・英文で検索">
+        </label>
+      </div>
+      <div class="teacher-action-row compact">
+        <button class="ghost-button" id="resetVisibleBtn" type="button">表示中の編集を戻す</button>
+        <button class="ghost-button" id="exportEditorBtn" type="button">配布用データを作る</button>
+      </div>
+      <p class="muted" id="editorMessage"></p>
+    </section>
+
+    <section class="panel teacher-wide-card">
+      <div class="section-title spread">
+        <div class="title-left">
+          <span class="badge">棚</span>
+          <div>
+            <h2 id="editorListTitle">問題一覧</h2>
+            <p id="editorListSummary">単元を選んでください。</p>
+          </div>
+        </div>
+      </div>
+      <div id="editorQuestionList" class="editor-question-list"></div>
+    </section>
+  </main>
+
+  <script src="/question-editor-data.js"></script>
+  <script src="/question-editor.js"></script>
+</body>
+</html>

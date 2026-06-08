@@ -1,6 +1,6 @@
 "use strict";
 
-const STORAGE_KEY = "wankoSobaGrammarProgress:v4";
+const STORAGE_KEY = "wankoSobaGrammarProgress:v5";
 const TEACHER_PACKAGE_KEY = "wankoSobaTeacherPackage:v1";
 
 const MODES = {
@@ -664,6 +664,7 @@ function loadProgress() {
     solvedBank: [],
     wrongBank: [],
     teacherBank: [],
+    editedQuestions: [],
     blankClearCount: 0,
     fullClearCount: 0,
     exUnlocked: false,
@@ -690,6 +691,7 @@ function cleanupProgress(data) {
   data.solvedBank = Array.isArray(data.solvedBank) ? data.solvedBank.filter(isNaturalStoredQuestion) : [];
   data.wrongBank = Array.isArray(data.wrongBank) ? data.wrongBank.filter(isNaturalStoredQuestion) : [];
   data.teacherBank = Array.isArray(data.teacherBank) ? data.teacherBank.map(normalizeTeacherQuestion).filter(Boolean) : [];
+  data.editedQuestions = Array.isArray(data.editedQuestions) ? data.editedQuestions.map(normalizeEditedQuestion).filter(Boolean) : [];
   data.titles = Array.isArray(data.titles) && data.titles.length ? data.titles : ["見習いそば客"];
   data.unitStats = data.unitStats || {};
   data.modeClears = data.modeClears || {};
@@ -1047,6 +1049,45 @@ function normalizeTeacherQuestion(item, index = 0) {
 }
 
 
+function normalizeEditedQuestion(item) {
+  if (!item || typeof item !== "object") return null;
+  const key = String(item.key || "").trim();
+  const jp = sanitizeJapanese(String(item.jp || "").trim());
+  const fullSentence = ensurePunctuation(String(item.fullSentence || "").replace(/。/g, "").replace(/\s+/g, " ").trim());
+  if (!key || !jp || !fullSentence) return null;
+  return {
+    key,
+    grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
+    unit: String(item.unit || ""),
+    jp,
+    fullSentence,
+    originalJp: String(item.originalJp || ""),
+    originalFullSentence: String(item.originalFullSentence || ""),
+    updatedAt: item.updatedAt || null,
+    teacherEdited: true
+  };
+}
+
+function buildBankQuestionKey(unit, index) {
+  return `bank::${unit}::${index}`;
+}
+
+function applyEditedQuestionOverride(question) {
+  const edits = Array.isArray(progress.editedQuestions) ? progress.editedQuestions : [];
+  if (!edits.length || !question) return question;
+  const sourceKey = question.sourceKey || "";
+  const byKey = sourceKey ? edits.find(item => item.key === sourceKey) : null;
+  const byOriginal = edits.find(item => item.originalFullSentence && normalize(item.originalFullSentence) === normalize(question.fullSentence));
+  const edit = byKey || byOriginal;
+  if (!edit) return question;
+  return {
+    ...question,
+    jp: edit.jp || question.jp,
+    fullSentence: ensurePunctuation(edit.fullSentence || question.fullSentence),
+    teacherEdited: true
+  };
+}
+
 function syncTeacherPackage() {
   try {
     const raw = localStorage.getItem(TEACHER_PACKAGE_KEY);
@@ -1077,6 +1118,11 @@ function applyTeacherPackage(packageData, options = {}) {
       progress.teacherBank = [...map.values()].slice(-800);
       changed = true;
     }
+  }
+
+  if (Array.isArray(packageData.editedQuestions)) {
+    progress.editedQuestions = packageData.editedQuestions.map(normalizeEditedQuestion).filter(Boolean).slice(-3000);
+    changed = true;
   }
 
   if (packageData.updatedAt) progress.teacherPackageUpdatedAt = packageData.updatedAt;
@@ -26408,7 +26454,8 @@ const EXPANDED_QUESTION_BANK = {
 function makeExpandedBankQuestion(unit, grade, level) {
   const bank = EXPANDED_QUESTION_BANK[unit];
   if (!Array.isArray(bank) || bank.length === 0) return null;
-  const item = pick(bank);
+  const index = Math.floor(Math.random() * bank.length);
+  const item = bank[index];
   return baseQuestion({
     unit,
     grade,
@@ -26418,7 +26465,8 @@ function makeExpandedBankQuestion(unit, grade, level) {
     blankSentence: item.blank,
     blankAnswer: item.answer,
     choices: item.choices,
-    explanation: item.explanation
+    explanation: item.explanation,
+    sourceKey: buildBankQuestionKey(unit, index)
   });
 }
 
@@ -26742,7 +26790,7 @@ function enforceCoreBlankPolicy(question) {
   return question;
 }
 
-function baseQuestion({ unit, grade, level, jp, fullSentence, blankAnswer, explanation, blankSentence, choices, teacherMade = false }) {
+function baseQuestion({ unit, grade, level, jp, fullSentence, blankAnswer, explanation, blankSentence, choices, teacherMade = false, sourceKey = "" }) {
   const answerTokens = tokenize(blankAnswer);
   const rawSentence = blankSentence || fullSentence.replace(blankAnswer, answerTokens.map(() => "___").join(" "));
   const sentence = expandBlankSlotsForAnswer(rawSentence, blankAnswer);
@@ -26758,9 +26806,11 @@ function baseQuestion({ unit, grade, level, jp, fullSentence, blankAnswer, expla
     blankAnswer,
     choices: choices || [],
     explanation: teacherMade ? explanation : alignGeneratedExplanation(explanation, blankAnswer),
-    teacherMade
+    teacherMade,
+    sourceKey
   };
-  const core = enforceCoreBlankPolicy(base);
+  const editedBase = teacherMade ? base : applyEditedQuestionOverride(base);
+  const core = enforceCoreBlankPolicy(editedBase);
   core.blankSentence = expandBlankSlotsForAnswer(core.blankSentence, core.blankAnswer);
   if (!teacherMade && core.blankAnswer !== base.blankAnswer) {
     core.explanation = alignGeneratedExplanation(explanation, core.blankAnswer);

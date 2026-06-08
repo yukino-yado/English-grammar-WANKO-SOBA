@@ -65,7 +65,8 @@ function createEmptyPackage() {
     version: 1,
     updatedAt: null,
     menuOverrides: {},
-    questions: []
+    questions: [],
+    editedQuestions: []
   };
 }
 
@@ -74,6 +75,7 @@ function normalizePackage(data) {
   const next = { ...empty, ...(data || {}) };
   next.menuOverrides = next.menuOverrides && typeof next.menuOverrides === "object" ? next.menuOverrides : {};
   next.questions = Array.isArray(next.questions) ? next.questions.map(normalizeQuestion).filter(Boolean) : [];
+  next.editedQuestions = Array.isArray(next.editedQuestions) ? next.editedQuestions.map(normalizeEditedQuestion).filter(Boolean) : [];
   return next;
 }
 
@@ -148,9 +150,11 @@ function renderStatus() {
   const menuCount = Object.keys(teacherPackage.menuOverrides || {}).length;
   const secretCount = Object.values(teacherPackage.menuOverrides || {}).filter(item => item && item.secretEnabled !== false && String(item.secret || "").trim()).length;
   const questionCount = teacherPackage.questions.length;
+  const editedCount = Array.isArray(teacherPackage.editedQuestions) ? teacherPackage.editedQuestions.length : 0;
   const date = teacherPackage.updatedAt ? new Date(teacherPackage.updatedAt).toLocaleString("ja-JP") : "未反映";
   $("#packageStatus").innerHTML = `
     <div class="teacher-status-card"><span>追加問題</span><strong>${questionCount}</strong></div>
+    <div class="teacher-status-card"><span>既存問題編集</span><strong>${editedCount}</strong></div>
     <div class="teacher-status-card"><span>お品書き編集</span><strong>${menuCount}</strong></div>
     <div class="teacher-status-card"><span>裏お品書き</span><strong>${secretCount}</strong></div>
     <div class="teacher-status-card"><span>最終反映</span><strong style="font-size:1rem;">${escapeHtml(date)}</strong></div>
@@ -164,6 +168,7 @@ function loadMenuEditor() {
   $("#menuNormalInput").value = data.normal || "";
   $("#menuExamplesInput").value = Array.isArray(data.examples) ? data.examples.join("\n") : "";
   $("#menuSecretInput").value = data.secret || "";
+  if ($("#menuSecretEnabled")) $("#menuSecretEnabled").checked = data.secretEnabled !== false;
 }
 
 function saveMenuOverride() {
@@ -171,7 +176,8 @@ function saveMenuOverride() {
   teacherPackage.menuOverrides[unit] = {
     normal: $("#menuNormalInput").value.trim(),
     examples: $("#menuExamplesInput").value.split(/\n+/).map(v => v.trim()).filter(Boolean),
-    secret: $("#menuSecretInput").value.trim()
+    secret: $("#menuSecretInput").value.trim(),
+    secretEnabled: $("#menuSecretEnabled") ? $("#menuSecretEnabled").checked : true
   };
   savePackage(`${unit} のお品書きを保存しました。`);
 }
@@ -235,6 +241,25 @@ function normalizeQuestion(item) {
     choices: finalChoices.slice(0, 8),
     explanation: String(item.explanation || "先生が追加した問題です。文の形と空欄の前後を確認しましょう。").trim(),
     teacherMade: true
+  };
+}
+
+function normalizeEditedQuestion(item) {
+  if (!item || typeof item !== "object") return null;
+  const key = String(item.key || "").trim();
+  const jp = stripBadJapanese(String(item.jp || "").trim());
+  const fullSentence = normalizeEnglish(String(item.fullSentence || "").trim());
+  if (!key || !jp || !fullSentence) return null;
+  return {
+    key,
+    grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
+    unit: String(item.unit || ""),
+    jp,
+    fullSentence,
+    originalJp: String(item.originalJp || ""),
+    originalFullSentence: String(item.originalFullSentence || ""),
+    updatedAt: item.updatedAt || null,
+    teacherEdited: true
   };
 }
 
