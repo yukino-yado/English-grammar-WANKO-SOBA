@@ -2,6 +2,7 @@
 
 const STORAGE_KEY = "wankoSobaGrammarProgress:v5";
 const TEACHER_PACKAGE_KEY = "wankoSobaTeacherPackage:v1";
+const TEACHER_CLOUD_ENDPOINT = "/api/teacher-package";
 
 const MODES = {
   erande: {
@@ -61,6 +62,9 @@ const TEACHER_UNIT_NAME = "先生からの一杯";
 const TEACHER_UNIT_PREFIX = "teacher-unit::";
 const IS_TEACHER_PREVIEW = new URLSearchParams(location.search).has("teacherPreview") || location.hash.includes("teacherPreview");
 const REVIEW_STYLE_UNITS = new Set(["be動詞のまとめ", "一般動詞の文のまとめ"]);
+const PREGENERATED_BANK_VERSION = "v3.5-selection-rule-bank";
+const PREGENERATED_PER_UNIT_LEVEL = 14;
+const PREGENERATED_LEVELS = ["small", "medium", "large", "extra"];
 
 const GRAMMAR_UNITS = {
   1: [
@@ -671,7 +675,9 @@ function loadProgress() {
     bestStreak: 0,
     titles: ["見習いそば客"],
     unitStats: {},
-    modeClears: {}
+    modeClears: {},
+    preGeneratedBank: [],
+    preGeneratedBankVersion: null
   };
 
   try {
@@ -695,7 +701,33 @@ function cleanupProgress(data) {
   data.titles = Array.isArray(data.titles) && data.titles.length ? data.titles : ["見習いそば客"];
   data.unitStats = data.unitStats || {};
   data.modeClears = data.modeClears || {};
+  data.preGeneratedBank = Array.isArray(data.preGeneratedBank) ? data.preGeneratedBank.map(normalizeGeneratedQuestionRecord).filter(Boolean) : [];
+  data.preGeneratedBankVersion = typeof data.preGeneratedBankVersion === "string" ? data.preGeneratedBankVersion : null;
   return data;
+}
+
+function normalizeGeneratedQuestionRecord(item) {
+  if (!item || typeof item !== "object") return null;
+  const unit = String(item.unit || "").trim();
+  const jp = sanitizeJapanese(String(item.jp || "").trim());
+  const fullSentence = ensurePunctuation(String(item.fullSentence || "").replace(/。/g, "").replace(/\s+/g, " ").trim());
+  if (!unit || !jp || !fullSentence) return null;
+  return {
+    ...item,
+    id: item.id || `pregenerated-${hashCode(`${unit}|${jp}|${fullSentence}`)}`,
+    key: item.key || `pregenerated::${hashCode(`${unit}|${jp}|${fullSentence}`)}`,
+    grade: Math.min(3, Math.max(1, Number(item.grade || findGradeByUnit(unit) || 1))),
+    unit,
+    level: item.level || item.levelScope || "small",
+    levelScope: item.levelScope || item.level || "small",
+    jp,
+    fullSentence,
+    blankSentence: item.blankSentence || "",
+    blankAnswer: item.blankAnswer || "",
+    choices: Array.isArray(item.choices) ? item.choices : [],
+    explanation: item.explanation || "ホーム画面で事前生成された問題です。",
+    preGenerated: true
+  };
 }
 
 function saveProgress() {
@@ -704,6 +736,8 @@ function saveProgress() {
 
 function init() {
   syncTeacherPackage();
+  ensurePreGeneratedQuestionBank();
+  syncTeacherPackageFromCloud();
   resetSelectedUnitsForGrade();
   renderSetup();
   bindEvents();
@@ -1088,6 +1122,25 @@ function applyEditedQuestionOverride(question) {
   };
 }
 
+
+async function syncTeacherPackageFromCloud() {
+  try {
+    const response = await fetch(TEACHER_CLOUD_ENDPOINT, { cache: "no-store" });
+    if (!response.ok) return;
+    const packageData = await response.json();
+    localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(packageData));
+    const changed = applyTeacherPackage(packageData, { persistProgress: false });
+    if (changed) {
+      ensurePreGeneratedQuestionBank({ force: true, silent: true });
+      saveProgress();
+      renderSetup();
+      updateStartHint();
+    }
+  } catch (error) {
+    console.warn("共有教師データの読み込みに失敗しました。", error);
+  }
+}
+
 function syncTeacherPackage() {
   try {
     const raw = localStorage.getItem(TEACHER_PACKAGE_KEY);
@@ -1195,6 +1248,52 @@ function updateStartHint() {
 function showToastInHint(message) {
   const hint = $("#startHint");
   if (hint) hint.textContent = message;
+}
+
+function ensurePreGeneratedQuestionBank(options = {}) {
+  const force = Boolean(options.force);
+  const silent = Boolean(options.silent);
+  const existing = Array.isArray(progress.preGeneratedBank) ? progress.preGeneratedBank : [];
+  if (!force && progress.preGeneratedBankVersion === PREGENERATED_BANK_VERSION && existing.length > 0) return existing;
+
+  const rows = [];
+  const seen = new Set();
+  Object.entries(GRAMMAR_UNITS).forEach(([gradeText, units]) => {
+    const grade = Number(gradeText);
+    units.forEach(unit => {
+      PREGENERATED_LEVELS.forEach(level => {
+        let attempts = 0;
+        let madeForLevel = 0;
+        while (madeForLevel < PREGENERATED_PER_UNIT_LEVEL && attempts < PREGENERATED_PER_UNIT_LEVEL * 40) {
+          attempts++;
+          const q = generateQuestion(unit, grade, level);
+          if (!q || !q.jp || !q.fullSentence) continue;
+          const naturalKey = `${grade}|${unit}|${level}|${normalize(q.jp)}|${normalize(q.fullSentence)}|${normalize(q.blankSentence)}|${normalize(q.blankAnswer)}`;
+          if (seen.has(naturalKey)) continue;
+          seen.add(naturalKey);
+          const key = q.sourceKey || `pregenerated::${hashCode(naturalKey)}`;
+          rows.push({
+            ...q,
+            key,
+            id: q.id || key,
+            grade,
+            unit,
+            level,
+            levelScope: level,
+            preGenerated: true,
+            generatedAtHome: true
+          });
+          madeForLevel++;
+        }
+      });
+    });
+  });
+
+  progress.preGeneratedBank = rows.map(normalizeGeneratedQuestionRecord).filter(Boolean);
+  progress.preGeneratedBankVersion = PREGENERATED_BANK_VERSION;
+  saveProgress();
+  if (!silent) console.info(`英文法わんこそば: ホーム表示用に${progress.preGeneratedBank.length}問を事前生成しました。`);
+  return progress.preGeneratedBank;
 }
 
 function startGame() {
@@ -26453,6 +26552,272 @@ const EXPANDED_QUESTION_BANK = {
     }
   ]
 };
+
+// v3.5: 中1 選択式・穴埋め式ルールをユーザー指定に合わせて再構成
+(function applyV35JuniorOneRuleBank(){
+  const bank = {};
+  const add = (unit, jp, en, blank, answer, choices, explanation) => {
+    if (!bank[unit]) bank[unit] = [];
+    bank[unit].push({ jp, en, blank, answer, choices, explanation });
+  };
+  const blankOf = (answer) => String(answer).trim().split(/\s+/).map(() => "___").join(" ");
+
+  const be1 = "be動詞の文①では、I は am、you / we は are を使います。肯定文・疑問文・否定文の形を確認します。";
+  [
+    ["私は生徒です。", "I am a student.", "___ ___ a student.", "I am"],
+    ["私は愛知県出身です。", "I am from Aichi.", "___ ___ from Aichi.", "I am"],
+    ["私は1年2組です。", "I am in 1-2.", "___ ___ in 1-2.", "I am"],
+    ["あなたは私の友達です。", "You are my friend.", "___ ___ my friend.", "You are"],
+    ["あなたは名古屋出身です。", "You are from Nagoya.", "___ ___ from Nagoya.", "You are"],
+    ["私たちは生徒です。", "We are students.", "___ ___ students.", "We are"],
+    ["私たちは1年2組です。", "We are in 1-2.", "___ ___ in 1-2.", "We are"],
+    ["私たちは愛知県出身です。", "We are from Aichi.", "___ ___ from Aichi.", "We are"]
+  ].forEach(x => add("be動詞の文①", x[0], x[1], x[2], x[3], ["I", "You", "We", "am", "are", "is"], be1));
+  [
+    ["あなたは英語の先生ですか。", "Are you an English teacher?", "___ ___ an English teacher?", "Are you"],
+    ["あなたは愛知県出身ですか。", "Are you from Aichi?", "___ ___ from Aichi?", "Are you"],
+    ["あなたは1年2組ですか。", "Are you in 1-2?", "___ ___ in 1-2?", "Are you"],
+    ["あなたは生徒ですか。", "Are you a student?", "___ ___ a student?", "Are you"]
+  ].forEach(x => add("be動詞の文①", x[0], x[1], x[2], x[3], ["Are", "you", "I", "am", "is", "are"], be1));
+  add("be動詞の文①", "はい、そうです。", "Yes, I am.", "Yes, ___ ___.", "I am", ["I", "you", "am", "are"], be1);
+  add("be動詞の文①", "いいえ、そうではありません。", "No, I am not.", "No, ___ ___ ___.", "I am not", ["I", "you", "am", "are", "not"], be1);
+  [
+    ["私は英語の先生ではありません。", "I'm not an English teacher.", "___ ___ an English teacher.", "I'm not"],
+    ["私は生徒ではありません。", "I'm not a student.", "___ ___ a student.", "I'm not"],
+    ["私たちは愛知県出身ではありません。", "We are not from Aichi.", "We ___ ___ from Aichi.", "are not"],
+    ["私たちは1年2組ではありません。", "We are not in 1-2.", "We ___ ___ in 1-2.", "are not"],
+    ["あなたは1年2組ではありません。", "You are not in 1-2.", "You ___ ___ in 1-2.", "are not"],
+    ["あなたは英語の先生ではありません。", "You are not an English teacher.", "You ___ ___ an English teacher.", "are not"]
+  ].forEach(x => add("be動詞の文①", x[0], x[1], x[2], x[3], ["I'm", "I", "am", "are", "not", "is"], be1));
+
+  const gen1 = "一般動詞の文①では、I / you / we を主語にし、動詞は原形を使います。疑問文は Do you、否定文は don’t + 動詞の原形です。";
+  [
+    ["私はサッカーをします。", "I play soccer.", "___ ___ soccer.", "I play"],
+    ["私は毎日英語を勉強します。", "I study English every day.", "___ ___ English every day.", "I study"],
+    ["私は犬を飼っています。", "I have a dog.", "___ ___ a dog.", "I have"],
+    ["あなたはテニスをします。", "You play tennis.", "___ ___ tennis.", "You play"],
+    ["あなたは猫を飼っています。", "You have a cat.", "___ ___ a cat.", "You have"],
+    ["私たちは毎日英語を勉強します。", "We study English every day.", "___ ___ English every day.", "We study"],
+    ["私たちは放課後にサッカーをします。", "We play soccer after school.", "___ ___ soccer after school.", "We play"],
+    ["私たちは音楽が好きです。", "We like music.", "___ ___ music.", "We like"]
+  ].forEach(x => add("一般動詞の文①", x[0], x[1], x[2], x[3], ["I", "You", "We", "play", "study", "have", "like", "plays", "studies"], gen1));
+  [
+    ["あなたはサッカーをしますか。", "Do you play soccer?", "___ ___ ___ soccer?", "Do you play"],
+    ["あなたは毎日英語を勉強しますか。", "Do you study English every day?", "___ ___ ___ English every day?", "Do you study"],
+    ["あなたは犬を飼っていますか。", "Do you have a dog?", "___ ___ ___ a dog?", "Do you have"],
+    ["あなたは音楽が好きですか。", "Do you like music?", "___ ___ ___ music?", "Do you like"],
+    ["あなたは本を読みますか。", "Do you read books?", "___ ___ ___ books?", "Do you read"]
+  ].forEach(x => add("一般動詞の文①", x[0], x[1], x[2], x[3], ["Do", "you", "play", "study", "have", "like", "read", "Does"], gen1));
+  add("一般動詞の文①", "はい、します。", "Yes, I do.", "Yes, ___ ___.", "I do", ["I", "you", "do", "does"], gen1);
+  add("一般動詞の文①", "いいえ、しません。", "No, I don't.", "No, ___ ___.", "I don't", ["I", "you", "don't", "do"], gen1);
+  [
+    ["私はサッカーをしません。", "I don't play soccer.", "I ___ ___ soccer.", "don't play"],
+    ["私たちは毎日英語を勉強しません。", "We don't study English every day.", "We ___ ___ English every day.", "don't study"],
+    ["あなたは犬を飼っていません。", "You don't have a dog.", "You ___ ___ a dog.", "don't have"],
+    ["私は音楽が好きではありません。", "I don't like music.", "I ___ ___ music.", "don't like"],
+    ["私たちは本を読みません。", "We don't read books.", "We ___ ___ books.", "don't read"]
+  ].forEach(x => add("一般動詞の文①", x[0], x[1], x[2], x[3], ["don't", "do", "play", "study", "have", "like", "read", "doesn't"], gen1));
+
+  const be2 = "be動詞の文②では、he / she / this / that / 三人称単数の主語に is を使います。this / that の返答は it is / it isn’t です。";
+  [
+    ["彼は私の兄です。", "He is my brother.", "___ ___ my brother.", "He is"],
+    ["彼女は私の姉です。", "She is my sister.", "___ ___ my sister.", "She is"],
+    ["これは私の本です。", "This is my book.", "___ ___ my book.", "This is"],
+    ["あれはあなたの机です。", "That is your desk.", "___ ___ your desk.", "That is"],
+    ["トムは私の友達です。", "Tom is my friend.", "___ ___ my friend.", "Tom is"],
+    ["サラは生徒です。", "Sara is a student.", "___ ___ a student.", "Sara is"],
+    ["私の兄は親切です。", "My brother is kind.", "___ ___ kind.", "My brother is"],
+    ["私の姉は忙しいです。", "My sister is busy.", "___ ___ busy.", "My sister is"]
+  ].forEach(x => add("be動詞の文②", x[0], x[1], x[2], x[3], ["He", "She", "This", "That", "Tom", "Sara", "My", "brother", "sister", "is", "am", "are"], be2));
+  [
+    ["彼はあなたの兄ですか。", "Is he your brother?", "___ ___ your brother?", "Is he"],
+    ["彼女はあなたの姉ですか。", "Is she your sister?", "___ ___ your sister?", "Is she"],
+    ["これはあなたのペンですか。", "Is this your pen?", "___ ___ your pen?", "Is this"],
+    ["あれはあなたのかばんですか。", "Is that your bag?", "___ ___ your bag?", "Is that"],
+    ["トムはあなたの友達ですか。", "Is Tom your friend?", "___ ___ your friend?", "Is Tom"],
+    ["サラは生徒ですか。", "Is Sara a student?", "___ ___ a student?", "Is Sara"]
+  ].forEach(x => add("be動詞の文②", x[0], x[1], x[2], x[3], ["Is", "he", "she", "this", "that", "Tom", "Sara", "are"], be2));
+  add("be動詞の文②", "はい、そうです。", "Yes, he is.", "Yes, ___ ___.", "he is", ["he", "she", "it", "is", "are"], be2);
+  add("be動詞の文②", "いいえ、そうではありません。", "No, she isn't.", "No, ___ ___.", "she isn't", ["he", "she", "it", "isn't", "is"], be2);
+  add("be動詞の文②", "はい、そうです。", "Yes, it is.", "Yes, ___ ___.", "it is", ["it", "this", "that", "is", "are"], be2);
+  add("be動詞の文②", "いいえ、そうではありません。", "No, it isn't.", "No, ___ ___.", "it isn't", ["it", "this", "that", "isn't", "is"], be2);
+  [
+    ["彼は私の兄ではありません。", "He is not my brother.", "He ___ ___ my brother.", "is not"],
+    ["彼女は私の先生ではありません。", "She is not my teacher.", "She ___ ___ my teacher.", "is not"],
+    ["これは私の本ではありません。", "This is not my book.", "This ___ ___ my book.", "is not"],
+    ["あれはあなたの机ではありません。", "That is not your desk.", "That ___ ___ your desk.", "is not"],
+    ["トムは私の同級生ではありません。", "Tom is not my classmate.", "Tom ___ ___ my classmate.", "is not"],
+    ["これは私のペンではありません。", "This isn't my pen.", "This ___ my pen.", "isn't"],
+    ["彼は私の兄ではありません。", "He isn't my brother.", "He ___ my brother.", "isn't"]
+  ].forEach(x => add("be動詞の文②", x[0], x[1], x[2], x[3], ["is", "not", "isn't", "am", "are"], be2));
+
+  const gen2 = "一般動詞の文②では、三人称単数の主語では肯定文の動詞に s / es / ies がつきます。疑問文・否定文では does / doesn’t を使い、動詞は原形に戻します。";
+  [
+    ["彼はサッカーをします。", "He plays soccer.", "___ ___ soccer.", "He plays"],
+    ["サラは音楽が好きです。", "Sara likes music.", "___ ___ music.", "Sara likes"],
+    ["私の兄は毎日英語を勉強します。", "My brother studies English every day.", "___ ___ ___ English every day.", "My brother studies"],
+    ["彼女は夕食後にテレビを見ます。", "She watches TV after dinner.", "___ ___ TV after dinner.", "She watches"],
+    ["彼は犬を飼っています。", "He has a dog.", "___ ___ a dog.", "He has"],
+    ["トムは学校へ行きます。", "Tom goes to school.", "___ ___ to school.", "Tom goes"]
+  ].forEach(x => add("一般動詞の文②", x[0], x[1], x[2], x[3], ["He", "She", "Sara", "Tom", "My", "brother", "play", "plays", "like", "likes", "study", "studies", "watch", "watches", "have", "has", "go", "goes"], gen2));
+  [
+    ["彼はサッカーをしますか。", "Does he play soccer?", "___ ___ ___ soccer?", "Does he play"],
+    ["彼女は音楽が好きですか。", "Does she like music?", "___ ___ ___ music?", "Does she like"],
+    ["彼は毎日英語を勉強しますか。", "Does he study English every day?", "___ ___ ___ English every day?", "Does he study"],
+    ["彼女は夕食後にテレビを見ますか。", "Does she watch TV after dinner?", "___ ___ ___ TV after dinner?", "Does she watch"],
+    ["トムは学校へ行きますか。", "Does Tom go to school?", "___ ___ ___ to school?", "Does Tom go"]
+  ].forEach(x => add("一般動詞の文②", x[0], x[1], x[2], x[3], ["Does", "he", "she", "Tom", "play", "like", "study", "watch", "go", "plays", "likes", "Do"], gen2));
+  add("一般動詞の文②", "はい、します。", "Yes, he does.", "Yes, ___ ___.", "he does", ["he", "she", "does", "do"], gen2);
+  add("一般動詞の文②", "いいえ、しません。", "No, she doesn't.", "No, ___ ___.", "she doesn't", ["he", "she", "doesn't", "does"], gen2);
+  [
+    ["彼はサッカーをしません。", "He does not play soccer.", "He ___ ___ ___ soccer.", "does not play"],
+    ["彼女は音楽が好きではありません。", "She doesn't like music.", "She ___ ___ music.", "doesn't like"],
+    ["彼は毎日英語を勉強しません。", "He doesn't study English every day.", "He ___ ___ English every day.", "doesn't study"],
+    ["彼女は夕食後にテレビを見ません。", "She doesn't watch TV after dinner.", "She ___ ___ TV after dinner.", "doesn't watch"],
+    ["彼は犬を飼っていません。", "He doesn't have a dog.", "He ___ ___ a dog.", "doesn't have"]
+  ].forEach(x => add("一般動詞の文②", x[0], x[1], x[2], x[3], ["does", "not", "doesn't", "play", "like", "study", "watch", "have", "plays", "likes"], gen2));
+
+  const beSum = "be動詞のまとめでは、主語を見て am / is / are を使い分けます。主語とbe動詞の組み合わせを確認します。";
+  [
+    ["私は生徒です。", "I am a student.", "___ ___ a student.", "I am"],
+    ["あなたは親切です。", "You are kind.", "___ ___ kind.", "You are"],
+    ["私たちは1年2組です。", "We are in 1-2.", "___ ___ in 1-2.", "We are"],
+    ["彼は私の友達です。", "He is my friend.", "___ ___ my friend.", "He is"],
+    ["彼女は忙しいです。", "She is busy.", "___ ___ busy.", "She is"],
+    ["これは私のペンです。", "This is my pen.", "___ ___ my pen.", "This is"],
+    ["あれは図書館です。", "That is a library.", "___ ___ a library.", "That is"],
+    ["彼らは愛知県出身です。", "They are from Aichi.", "___ ___ from Aichi.", "They are"],
+    ["これらは私の本です。", "These are my books.", "___ ___ my books.", "These are"],
+    ["あれらはあなたのかばんです。", "Those are your bags.", "___ ___ your bags.", "Those are"],
+    ["トムは私の同級生です。", "Tom is my classmate.", "___ ___ my classmate.", "Tom is"],
+    ["私の友達は親切です。", "My friends are kind.", "___ ___ kind.", "My friends are"]
+  ].forEach(x => add("be動詞のまとめ", x[0], x[1], x[2], x[3], ["I", "You", "We", "He", "She", "They", "These", "Those", "My", "friends", "am", "is", "are"], beSum));
+
+  const genSum = "一般動詞のまとめでは、主語を見て動詞の形、Do / Does、don’t / doesn’t を使い分けます。疑問文・否定文では動詞は原形に戻します。";
+  [
+    ["私はサッカーをします。", "I play soccer.", "___ ___ soccer.", "I play"],
+    ["私たちは毎日英語を勉強します。", "We study English every day.", "___ ___ English every day.", "We study"],
+    ["彼女は音楽が好きです。", "She likes music.", "___ ___ music.", "She likes"],
+    ["トムは夕食後にテレビを見ます。", "Tom watches TV after dinner.", "___ ___ TV after dinner.", "Tom watches"],
+    ["私の兄は犬を飼っています。", "My brother has a dog.", "___ ___ ___ a dog.", "My brother has"],
+    ["彼らは放課後にサッカーをします。", "They play soccer after school.", "___ ___ soccer after school.", "They play"],
+    ["あなたはサッカーをしますか。", "Do you play soccer?", "___ ___ ___ soccer?", "Do you play"],
+    ["彼は毎日英語を勉強しますか。", "Does he study English every day?", "___ ___ ___ English every day?", "Does he study"],
+    ["サラは音楽が好きですか。", "Does Sara like music?", "___ ___ ___ music?", "Does Sara like"],
+    ["彼らは夕食後にテレビを見ますか。", "Do they watch TV after dinner?", "___ ___ ___ TV after dinner?", "Do they watch"],
+    ["私はサッカーをしません。", "I don't play soccer.", "I ___ ___ soccer.", "don't play"],
+    ["彼は音楽が好きではありません。", "He doesn't like music.", "He ___ ___ music.", "doesn't like"],
+    ["彼らは犬を飼っていません。", "They don't have a dog.", "They ___ ___ a dog.", "don't have"]
+  ].forEach(x => add("一般動詞の文のまとめ", x[0], x[1], x[2], x[3], ["I", "you", "he", "she", "they", "Do", "Does", "don't", "doesn't", "play", "plays", "study", "studies", "like", "likes", "watch", "watches", "have", "has"], genSum));
+
+  const np = "名詞・代名詞の基本では、名詞の複数形と、文の中で必要な代名詞の形を確認します。";
+  [
+    ["私は本を2冊持っています。", "I have two books.", "I have two ___.", "books", ["book", "books", "box", "boxes"]],
+    ["私は箱を3つ持っています。", "I have three boxes.", "I have three ___.", "boxes", ["box", "boxes", "book", "books"]],
+    ["私は時計を2つ持っています。", "I have two watches.", "I have two ___.", "watches", ["watch", "watches", "city", "cities"]],
+    ["私は市を3つ知っています。", "I know three cities.", "I know three ___.", "cities", ["city", "cities", "baby", "babies"]],
+    ["これは私の本です。", "This is my book.", "This is ___ ___.", "my book", ["my", "me", "I", "book", "books"]],
+    ["あれはあなたの机です。", "That is your desk.", "That is ___ ___.", "your desk", ["your", "you", "desk", "desks"]],
+    ["これは彼女のかばんです。", "This is her bag.", "This is ___ ___.", "her bag", ["she", "her", "bag", "bags"]],
+    ["これは私たちの英語の先生です。", "This is our English teacher.", "This is ___ ___ ___.", "our English teacher", ["our", "us", "English", "teacher", "teachers"]],
+    ["これらは彼らの新しい本です。", "These are their new books.", "These are ___ ___ ___.", "their new books", ["they", "their", "new", "book", "books"]],
+    ["私は彼が好きです。", "I like him.", "I like ___.", "him", ["he", "his", "him", "her"]],
+    ["彼女は私を知っています。", "She knows me.", "She knows ___.", "me", ["I", "my", "me", "mine"]],
+    ["私たちは彼らを助けます。", "We help them.", "We help ___.", "them", ["they", "their", "them", "we"]],
+    ["この本は私のものです。", "This book is mine.", "This book is ___.", "mine", ["my", "me", "mine", "I"]]
+  ].forEach(x => add("名詞・代名詞の基本", x[0], x[1], x[2], x[3], x[4], np));
+
+  const imp = "命令文では主語を置かず、動詞の原形から始めます。否定命令文は Don’t + 動詞の原形です。";
+  [
+    ["ドアを開けなさい。", "Open the door.", "___ the door.", "Open"],
+    ["英語を勉強しなさい。", "Study English.", "___ English.", "Study"],
+    ["ここに名前を書きなさい。", "Write your name here.", "___ your name here.", "Write"],
+    ["ここで走ってはいけません。", "Don't run here.", "___ ___ here.", "Don't run"],
+    ["ドアを開けてはいけません。", "Don't open the door.", "___ ___ the door.", "Don't open"],
+    ["日本語を話してはいけません。", "Don't speak Japanese.", "___ ___ Japanese.", "Don't speak"],
+    ["窓を開けてください。", "Please open the window.", "___ ___ the window.", "Please open"],
+    ["あなたの名前を書いてください。", "Write your name, please.", "___ your name, please.", "Write"]
+  ].forEach(x => add("基本表現の広がり①", x[0], x[1], x[2], x[3], ["Open", "Study", "Write", "Don't", "run", "open", "speak", "Please"], imp));
+  const can = "can の後ろは必ず動詞の原形です。主語が he / she でも can plays にはしません。";
+  [
+    ["私は速く走ることができます。", "I can run fast.", "I ___ ___ fast.", "can run"],
+    ["彼女は英語を話すことができます。", "She can speak English.", "She ___ ___ English.", "can speak"],
+    ["彼らはピアノを弾くことができます。", "They can play the piano.", "They ___ ___ the piano.", "can play"],
+    ["あなたは英語を話すことができますか。", "Can you speak English?", "___ ___ ___ English?", "Can you speak"],
+    ["彼女はピアノを弾くことができますか。", "Can she play the piano?", "___ ___ ___ the piano?", "Can she play"],
+    ["はい、できます。", "Yes, I can.", "Yes, ___ ___.", "I can"],
+    ["いいえ、できません。", "No, she can't.", "No, ___ ___.", "she can't"],
+    ["私は速く走ることができません。", "I can't run fast.", "I ___ ___ fast.", "can't run"],
+    ["彼は英語を話すことができません。", "He can't speak English.", "He ___ ___ English.", "can't speak"]
+  ].forEach(x => add("基本表現の広がり①", x[0], x[1], x[2], x[3], ["can", "can't", "Can", "I", "you", "she", "run", "speak", "play", "cans"], can));
+
+  const there = "存在構文では、単数なら There is、複数なら There are を使います。How many の後ろは複数名詞です。";
+  [
+    ["机の上に本が1冊あります。", "There is a book on the desk.", "___ ___ a book on the desk.", "There is"],
+    ["かばんの中にペンが1本あります。", "There is a pen in the bag.", "___ ___ a pen in the bag.", "There is"],
+    ["机の上に本が2冊あります。", "There are two books on the desk.", "___ ___ two books on the desk.", "There are"],
+    ["部屋にたくさんの生徒がいます。", "There are many students in the room.", "___ ___ many students in the room.", "There are"],
+    ["机の上に本はありません。", "There is not a book on the desk.", "___ ___ ___ a book on the desk.", "There is not"],
+    ["机の上に本は1冊もありません。", "There are not any books on the desk.", "___ ___ ___ any books on the desk.", "There are not"],
+    ["机の上に本がありますか。", "Is there a book on the desk?", "___ ___ a book on the desk?", "Is there"],
+    ["机の上に本はありますか。", "Are there any books on the desk?", "___ ___ any books on the desk?", "Are there"],
+    ["部屋には何人の生徒がいますか。", "How many students are there in the room?", "___ ___ ___ ___ ___ in the room?", "How many students are there"],
+    ["机の上には何冊の本がありますか。", "How many books are there on the desk?", "___ ___ ___ ___ ___ on the desk?", "How many books are there"]
+  ].forEach(x => add("存在構文", x[0], x[1], x[2], x[3], ["There", "is", "are", "not", "Is", "Are", "How", "many", "students", "books", "there"], there));
+
+  const how = "方法をたずねる文では、日本語に合わせて How do you / How can I・we / Can you を使い分けます。";
+  [
+    ["あなたはどうやって学校へ行きますか。", "How do you go to school?", "___ ___ ___ go to school?", "How do you"],
+    ["あなたはどうやって英語を勉強しますか。", "How do you study English?", "___ ___ ___ study English?", "How do you"],
+    ["あなたはどうやって学校へ行きますか。", "How do you go to school?", "___ ___ ___ ___ to school?", "How do you go"],
+    ["私はどうやって駅へ行けますか。", "How can I go to the station?", "___ ___ ___ go to the station?", "How can I"],
+    ["私たちはどうやって英語を勉強できますか。", "How can we study English?", "___ ___ ___ study English?", "How can we"],
+    ["私を手伝ってくれますか。", "Can you help me?", "___ ___ ___ me?", "Can you help"],
+    ["ドアを開けてくれますか。", "Can you open the door?", "___ ___ ___ the door?", "Can you open"]
+  ].forEach(x => add("方法をたずねる文", x[0], x[1], x[2], x[3], ["How", "do", "you", "can", "I", "we", "Can", "help", "open", "go", "study"], how));
+
+  const prog = "現在進行形は be動詞 + 動詞ing で作ります。動詞＋前置詞は語数分に分けて空欄を用意します。";
+  [
+    ["私は今英語を勉強しています。", "I am studying English now.", "I ___ ___ English now.", "am studying"],
+    ["彼は今サッカーをしています。", "He is playing soccer now.", "He ___ ___ soccer now.", "is playing"],
+    ["彼らは今テレビを見ています。", "They are watching TV now.", "They ___ ___ TV now.", "are watching"],
+    ["彼女は今音楽を聴いています。", "She is listening to music now.", "She ___ ___ ___ music now.", "is listening to"],
+    ["あなたは今英語を勉強していますか。", "Are you studying English now?", "___ ___ ___ English now?", "Are you studying"],
+    ["彼は今サッカーをしていますか。", "Is he playing soccer now?", "___ ___ ___ soccer now?", "Is he playing"],
+    ["彼女は今音楽を聴いていますか。", "Is she listening to music now?", "___ ___ ___ ___ music now?", "Is she listening to"],
+    ["私は今英語を勉強していません。", "I am not studying English now.", "I ___ ___ ___ English now.", "am not studying"],
+    ["彼は今サッカーをしていません。", "He is not playing soccer now.", "He ___ ___ ___ soccer now.", "is not playing"],
+    ["彼は今音楽を聴いていません。", "He isn't listening to music now.", "He ___ ___ ___ music now.", "isn't listening to"],
+    ["彼は今音楽を聴いていません。", "He is not listening to music now.", "He ___ ___ ___ ___ music now.", "is not listening to"]
+  ].forEach(x => add("現在進行形", x[0], x[1], x[2], x[3], ["am", "is", "are", "not", "isn't", "aren't", "studying", "playing", "watching", "listening", "to", "Are", "Is", "you", "he", "she"], prog));
+
+  const past = "過去の文では、一般動詞は過去形を使います。Did / didn’t を使う疑問文・否定文では動詞は原形に戻します。be動詞の過去形は was / were です。";
+  [
+    ["私は昨日サッカーをしました。", "I played soccer yesterday.", "I ___ soccer yesterday.", "played"],
+    ["彼女は昨夜英語を勉強しました。", "She studied English last night.", "She ___ English last night.", "studied"],
+    ["彼は夕食後にテレビを見ました。", "He watched TV after dinner.", "He ___ TV after dinner.", "watched"],
+    ["私たちは昨日学校へ行きました。", "We went to school yesterday.", "We ___ to school yesterday.", "went"],
+    ["私は昨日音楽を聴きました。", "I listened to music yesterday.", "I ___ ___ music yesterday.", "listened to"],
+    ["あなたは昨日サッカーをしましたか。", "Did you play soccer yesterday?", "___ ___ ___ soccer yesterday?", "Did you play"],
+    ["彼女は昨夜英語を勉強しましたか。", "Did she study English last night?", "___ ___ ___ English last night?", "Did she study"],
+    ["彼は昨日学校へ行きましたか。", "Did he go to school yesterday?", "___ ___ ___ to school yesterday?", "Did he go"],
+    ["あなたは昨日音楽を聴きましたか。", "Did you listen to music yesterday?", "___ ___ ___ ___ music yesterday?", "Did you listen to"],
+    ["私は昨日サッカーをしませんでした。", "I didn't play soccer yesterday.", "I ___ ___ soccer yesterday.", "didn't play"],
+    ["彼女は昨夜英語を勉強しませんでした。", "She didn't study English last night.", "She ___ ___ English last night.", "didn't study"],
+    ["私は昨日音楽を聴きませんでした。", "I didn't listen to music yesterday.", "I ___ ___ ___ music yesterday.", "didn't listen to"],
+    ["私は昨日忙しかったです。", "I was busy yesterday.", "___ ___ busy yesterday.", "I was"],
+    ["彼女は昨日うれしそうでした。", "She was happy yesterday.", "___ ___ happy yesterday.", "She was"],
+    ["彼らは昨日公園にいました。", "They were in the park yesterday.", "___ ___ in the park yesterday.", "They were"],
+    ["あなたは昨日忙しかったですか。", "Were you busy yesterday?", "___ ___ busy yesterday?", "Were you"],
+    ["彼は昨日公園にいましたか。", "Was he in the park yesterday?", "___ ___ in the park yesterday?", "Was he"],
+    ["私は昨日忙しくありませんでした。", "I was not busy yesterday.", "I ___ ___ busy yesterday.", "was not"],
+    ["彼らは昨日公園にいませんでした。", "They were not in the park yesterday.", "They ___ ___ in the park yesterday.", "were not"],
+    ["彼は昨日忙しくありませんでした。", "He wasn't busy yesterday.", "He ___ busy yesterday.", "wasn't"],
+    ["私たちは昨日学校にいませんでした。", "We weren't at school yesterday.", "We ___ at school yesterday.", "weren't"]
+  ].forEach(x => add("過去形の基本", x[0], x[1], x[2], x[3], ["played", "studied", "watched", "went", "listen", "listened", "to", "Did", "didn't", "play", "study", "go", "was", "were", "not", "wasn't", "weren't", "I", "you", "he", "she", "they"], past));
+
+  Object.assign(EXPANDED_QUESTION_BANK, bank);
+})();
 
 function makeExpandedBankQuestion(unit, grade, level) {
   const bank = EXPANDED_QUESTION_BANK[unit];

@@ -1,6 +1,7 @@
 "use strict";
 
 const TEACHER_PACKAGE_KEY = "wankoSobaTeacherPackage:v1";
+const TEACHER_CLOUD_ENDPOINT = "/api/teacher-package";
 
 const GRAMMAR_UNITS = {
   1: [
@@ -47,6 +48,8 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 let teacherPackage = loadPackage();
 let suggestions = [];
+let cloudSaveTimer = null;
+let loadingSharedData = false;
 
 function loadPackage() {
   try {
@@ -79,11 +82,12 @@ function normalizePackage(data) {
   return next;
 }
 
-function savePackage(message = "保存しました。") {
+function savePackage(message = "保存しました。", options = {}) {
   teacherPackage.updatedAt = new Date().toISOString();
   localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
   renderAll();
   showMessage(message);
+  if (!options.localOnly) queueCloudSave();
 }
 
 function init() {
@@ -91,6 +95,54 @@ function init() {
   bindEvents();
   loadMenuEditor();
   renderAll();
+  loadCloudPackage();
+}
+
+
+async function loadCloudPackage() {
+  if (loadingSharedData) return;
+  loadingSharedData = true;
+  try {
+    const response = await fetch(TEACHER_CLOUD_ENDPOINT, { cache: "no-store" });
+    if (!response.ok) throw new Error(await response.text());
+    const data = await response.json();
+    teacherPackage = normalizePackage(data);
+    localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
+    loadMenuEditor();
+    renderAll();
+    showMessage(teacherPackage.updatedAt ? "共有データを読み込みました。" : "共有データはまだ空です。ここで編集すると全端末に保存されます。");
+  } catch (error) {
+    console.warn("共有データの読み込みに失敗しました。", error);
+    showMessage("共有データを読み込めませんでした。Vercel Blobの設定を確認してください。", true);
+  } finally {
+    loadingSharedData = false;
+  }
+}
+
+function queueCloudSave() {
+  window.clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = window.setTimeout(saveCloudPackage, 500);
+}
+
+async function saveCloudPackage() {
+  try {
+    const response = await fetch(TEACHER_CLOUD_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(teacherPackage)
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const result = await response.json();
+    if (result && result.package) {
+      teacherPackage = normalizePackage(result.package);
+      localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
+      renderAll();
+    }
+    showMessage("共有データへ保存しました。別端末でも同じ内容を読み込めます。");
+  } catch (error) {
+    console.warn("共有データの保存に失敗しました。", error);
+    showMessage("この端末には保存しましたが、共有データへの保存に失敗しました。", true);
+  }
 }
 
 function populateStaticSelects() {
@@ -122,7 +174,7 @@ function bindEvents() {
   $("#saveMenuBtn").addEventListener("click", saveMenuOverride);
   $("#resetMenuBtn").addEventListener("click", resetMenuEditor);
   $("#addQuestionBtn").addEventListener("click", addManualQuestion);
-  $("#syncBtn").addEventListener("click", () => savePackage("生徒版へ反映しました。生徒用の index.html を開き直すと反映されます。"));
+  $("#syncBtn").addEventListener("click", () => savePackage("生徒版へ反映しました。共有データにも保存します。"));
   $("#exportBtn").addEventListener("click", exportPackage);
   $("#importBtn").addEventListener("click", () => $("#importPackageInput").click());
   $("#importPackageInput").addEventListener("change", importPackageFile);

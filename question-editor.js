@@ -2,6 +2,7 @@
 
 const TEACHER_PACKAGE_KEY = "wankoSobaTeacherPackage:v1";
 const STUDENT_PROGRESS_KEY = "wankoSobaGrammarProgress:v5";
+const TEACHER_CLOUD_ENDPOINT = "/api/teacher-package";
 
 const GRAMMAR_UNITS = {
   1: [
@@ -33,11 +34,14 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 let teacherPackage = loadPackage();
 let visibleRows = [];
 let hasSearched = false;
+let cloudSaveTimer = null;
+let loadingSharedData = false;
 
 function init() {
   populateFilters();
   bindEvents();
   clearEditorResults();
+  loadCloudPackage();
 }
 
 function loadPackage() {
@@ -80,11 +84,56 @@ function normalizeEdit(item) {
   };
 }
 
-function savePackage(message = "保存しました。") {
+function savePackage(message = "保存しました。", options = {}) {
   teacherPackage.version = 3;
   teacherPackage.updatedAt = new Date().toISOString();
   localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
   showMessage(message);
+  if (!options.localOnly) queueCloudSave();
+}
+
+async function loadCloudPackage() {
+  if (loadingSharedData) return;
+  loadingSharedData = true;
+  try {
+    const response = await fetch(TEACHER_CLOUD_ENDPOINT, { cache: "no-store" });
+    if (!response.ok) throw new Error(await response.text());
+    const data = await response.json();
+    teacherPackage = normalizePackage(data);
+    localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
+    clearEditorResults();
+    showMessage(teacherPackage.updatedAt ? "共有データを読み込みました。" : "共有データはまだ空です。ここで編集すると全端末に保存されます。");
+  } catch (error) {
+    console.warn("共有データの読み込みに失敗しました。", error);
+    showMessage("共有データを読み込めませんでした。Vercel Blobの設定を確認してください。");
+  } finally {
+    loadingSharedData = false;
+  }
+}
+
+function queueCloudSave() {
+  window.clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = window.setTimeout(saveCloudPackage, 500);
+}
+
+async function saveCloudPackage() {
+  try {
+    const response = await fetch(TEACHER_CLOUD_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(teacherPackage)
+    });
+    if (!response.ok) throw new Error(await response.text());
+    const result = await response.json();
+    if (result && result.package) {
+      teacherPackage = normalizePackage(result.package);
+      localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
+    }
+    showMessage("共有データへ保存しました。別端末でも同じ内容を読み込めます。");
+  } catch (error) {
+    console.warn("共有データの保存に失敗しました。", error);
+    showMessage("この端末には保存しましたが、共有データへの保存に失敗しました。");
+  }
 }
 
 function populateFilters() {
@@ -137,6 +186,7 @@ function getStudentProgress() {
 function getGeneratedQuestionRows() {
   const progress = getStudentProgress();
   const sources = [
+    ...(Array.isArray(progress.preGeneratedBank) ? progress.preGeneratedBank : []),
     ...(Array.isArray(progress.history) ? progress.history : []),
     ...(Array.isArray(progress.solvedBank) ? progress.solvedBank : []),
     ...(Array.isArray(progress.wrongBank) ? progress.wrongBank : [])
@@ -149,20 +199,21 @@ function getGeneratedQuestionRows() {
     const unit = String(item.unit || "").trim();
     if (!jp || !fullSentence || !unit) return;
     const grade = Math.min(3, Math.max(1, Number(item.grade || findGradeByUnit(unit) || 1)));
-    const key = `generated::${hashCode(`${unit}|${jp}|${fullSentence}`)}`;
+    const key = String(item.key || item.sourceKey || `generated::${hashCode(`${unit}|${jp}|${fullSentence}`)}`);
     if (map.has(key)) return;
     map.set(key, {
       key,
       grade,
       unit,
       sourceIndex: index,
-      levelScope: item.level || "generated",
+      levelScope: item.levelScope || item.level || "generated",
       jp,
       fullSentence,
       blankSentence: item.blankSentence || "生成済み問題のため、必要に応じて生徒側で自動調整されます。",
       blankAnswer: item.blankAnswer || "",
       explanation: item.explanation || "生成済み問題です。日本語文と英文の自然さを確認してください。",
-      generatedStored: true
+      generatedStored: true,
+      preGenerated: Boolean(item.preGenerated || item.generatedAtHome)
     });
   });
   return [...map.values()];
