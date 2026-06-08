@@ -253,9 +253,46 @@ function buildStaticHomeGeneratedRows() {
   return rows;
 }
 
+function expandRowsForAllEditorLevels(rows) {
+  const expanded = [];
+  (rows || []).forEach((row, index) => {
+    if (!row || !row.unit || !row.jp || !row.fullSentence) return;
+    const scope = row.levelScope || row.level || "all";
+    const scopes = Array.isArray(scope) ? scope : String(scope).split(/[ ,/|]+/).filter(Boolean);
+    const shouldExpand = !scopes.length || scopes.includes("all");
+    if (shouldExpand) {
+      EDITOR_LEVELS.forEach(level => {
+        const baseKey = row.key || `editor-row-${index}`;
+        expanded.push({
+          ...row,
+          key: `${baseKey}::level::${level}`,
+          id: `${baseKey}::level::${level}`,
+          level,
+          levelScope: level,
+          editorLevelGenerated: true
+        });
+      });
+    } else {
+      scopes.forEach(level => {
+        if (!EDITOR_LEVELS.includes(level)) return;
+        const baseKey = row.key || `editor-row-${index}`;
+        const alreadySpecific = String(baseKey).includes(`::level::${level}`);
+        expanded.push({
+          ...row,
+          key: alreadySpecific ? baseKey : `${baseKey}::level::${level}`,
+          id: alreadySpecific ? (row.id || baseKey) : `${baseKey}::level::${level}`,
+          level,
+          levelScope: level
+        });
+      });
+    }
+  });
+  return expanded;
+}
+
 function getEditorQuestionRows() {
-  const base = Array.isArray(window.EDITOR_QUESTION_INDEX) ? window.EDITOR_QUESTION_INDEX : [];
-  const generated = getGeneratedQuestionRows();
+  const base = expandRowsForAllEditorLevels(Array.isArray(window.EDITOR_QUESTION_INDEX) ? window.EDITOR_QUESTION_INDEX : []);
+  const generated = expandRowsForAllEditorLevels(getGeneratedQuestionRows());
   const staticGenerated = buildStaticHomeGeneratedRows();
   const merged = [...base, ...generated, ...staticGenerated];
   const map = new Map();
@@ -288,7 +325,7 @@ function matchesLevel(row, selectedLevel) {
   const scope = row.levelScope || row.level || "all";
   if (scope === "all") return true;
   if (Array.isArray(scope)) return scope.includes(selectedLevel) || scope.includes("all");
-  return String(scope).split(/[ ,/|]+/).includes(selectedLevel);
+  return String(scope).split(/[ ,/|]+/).filter(Boolean).includes(selectedLevel);
 }
 
 function renderList() {

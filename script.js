@@ -62,7 +62,7 @@ const TEACHER_UNIT_NAME = "先生からの一杯";
 const TEACHER_UNIT_PREFIX = "teacher-unit::";
 const IS_TEACHER_PREVIEW = new URLSearchParams(location.search).has("teacherPreview") || location.hash.includes("teacherPreview");
 const REVIEW_STYLE_UNITS = new Set(["be動詞のまとめ", "一般動詞の文のまとめ"]);
-const PREGENERATED_BANK_VERSION = "v3.6-all-level-home-bank";
+const PREGENERATED_BANK_VERSION = "v3.8-editor-explicit-all-level-bank";
 const PREGENERATED_PER_UNIT_LEVEL = 24;
 const PREGENERATED_LEVELS = ["small", "medium", "large", "extra"];
 
@@ -1267,11 +1267,36 @@ function showToastInHint(message) {
   if (hint) hint.textContent = message;
 }
 
+function hasPreGeneratedCoverage(existing) {
+  if (!Array.isArray(existing) || existing.length === 0) return false;
+  const required = new Set();
+  Object.entries(GRAMMAR_UNITS).forEach(([gradeText, units]) => {
+    const grade = Number(gradeText);
+    units.forEach(unit => {
+      PREGENERATED_LEVELS.forEach(level => required.add(`${grade}::${unit}::${level}`));
+    });
+  });
+  existing.forEach(item => {
+    if (!item || !item.unit) return;
+    const grade = Number(item.grade || findGradeByUnitLocal(item.unit) || 0);
+    const levels = String(item.levelScope || item.level || "").split(/[ ,/|]+/).filter(Boolean);
+    levels.forEach(level => required.delete(`${grade}::${item.unit}::${level}`));
+  });
+  return required.size === 0;
+}
+
+function findGradeByUnitLocal(unit) {
+  for (const [grade, units] of Object.entries(GRAMMAR_UNITS)) {
+    if (units.includes(unit)) return Number(grade);
+  }
+  return null;
+}
+
 function ensurePreGeneratedQuestionBank(options = {}) {
   const force = Boolean(options.force);
   const silent = Boolean(options.silent);
   const existing = Array.isArray(progress.preGeneratedBank) ? progress.preGeneratedBank : [];
-  if (!force && progress.preGeneratedBankVersion === PREGENERATED_BANK_VERSION && existing.length > 0) return existing;
+  if (!force && progress.preGeneratedBankVersion === PREGENERATED_BANK_VERSION && hasPreGeneratedCoverage(existing)) return existing;
 
   const rows = [];
   const seen = new Set();
