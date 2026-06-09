@@ -164,6 +164,8 @@ function bindEvents() {
     }
   });
   $("#saveVisibleBtn").addEventListener("click", saveVisibleEdits);
+  $("#openAllQuestionsBtn").addEventListener("click", openAllQuestionCards);
+  $("#closeAllQuestionsBtn").addEventListener("click", closeAllQuestionCards);
   $("#resetVisibleBtn").addEventListener("click", resetVisibleEdits);
   $("#exportEditorBtn").addEventListener("click", exportPackage);
 }
@@ -362,39 +364,61 @@ function renderList() {
     const currentJp = edit?.jp || row.jp;
     const currentEn = edit?.fullSentence || row.fullSentence;
     const edited = Boolean(edit);
+    const sourceLabel = row.generatedStored ? "生成済み問題" : "基準問題";
     return `
-      <article class="editor-question-card ${edited ? "is-edited" : ""}" data-key="${escapeHtml(row.key)}">
-        <div class="editor-card-head">
-          <span class="shelf-mark">${row.generatedStored ? "生成済み問題" : "基準問題"} ${index + 1}</span>
-          <span class="shelf-mark level-mark">難易度：${escapeHtml(getLevelLabel(row.levelScope || row.level || "all"))}</span>
-          ${edited ? `<span class="edit-badge">編集済み</span>` : `<span class="edit-badge muted-badge">未編集</span>`}
+      <details class="editor-question-card ${edited ? "is-edited" : ""}" data-key="${escapeHtml(row.key)}">
+        <summary class="editor-question-summary">
+          <span class="editor-summary-left">
+            <span class="shelf-mark">${sourceLabel} ${index + 1}</span>
+            <span class="shelf-mark level-mark">難易度：${escapeHtml(getLevelLabel(row.levelScope || row.level || "all"))}</span>
+            ${edited ? `<span class="edit-badge">編集済み</span>` : `<span class="edit-badge muted-badge">未編集</span>`}
+          </span>
+          <span class="editor-summary-text">
+            <strong>${escapeHtml(currentJp)}</strong>
+            <small>${escapeHtml(currentEn)}</small>
+          </span>
+        </summary>
+        <div class="editor-card-body">
+          <div class="editor-original-box">
+            <p><strong>${row.generatedStored ? "生成時の日本語" : "元の日本語"}：</strong>${escapeHtml(row.jp)}</p>
+            <p><strong>${row.generatedStored ? "生成時の英文" : "元の英文"}：</strong>${escapeHtml(row.fullSentence)}</p>
+          </div>
+          <div class="editor-input-grid">
+            <label>日本語文
+              <textarea rows="3" data-field="jp">${escapeHtml(currentJp)}</textarea>
+            </label>
+            <label>英文
+              <textarea rows="3" data-field="fullSentence">${escapeHtml(currentEn)}</textarea>
+            </label>
+          </div>
+          <details class="editor-reference">
+            <summary>穴埋め・答え・解説を確認</summary>
+            <p><strong>穴埋め：</strong>${escapeHtml(row.blankSentence)}</p>
+            <p><strong>答え：</strong>${escapeHtml(row.blankAnswer)}</p>
+            <p><strong>解説：</strong>${escapeHtml(row.explanation)}</p>
+          </details>
+          <div class="teacher-question-actions">
+            <button class="ghost-button" type="button" data-restore-key="${escapeHtml(row.key)}">この問題を元に戻す</button>
+          </div>
         </div>
-        <div class="editor-original-box">
-          <p><strong>${row.generatedStored ? "生成時の日本語" : "元の日本語"}：</strong>${escapeHtml(row.jp)}</p>
-          <p><strong>${row.generatedStored ? "生成時の英文" : "元の英文"}：</strong>${escapeHtml(row.fullSentence)}</p>
-        </div>
-        <div class="editor-input-grid">
-          <label>日本語文
-            <textarea rows="3" data-field="jp">${escapeHtml(currentJp)}</textarea>
-          </label>
-          <label>英文
-            <textarea rows="3" data-field="fullSentence">${escapeHtml(currentEn)}</textarea>
-          </label>
-        </div>
-        <details class="editor-reference">
-          <summary>穴埋め・答え・解説を確認</summary>
-          <p><strong>穴埋め：</strong>${escapeHtml(row.blankSentence)}</p>
-          <p><strong>答え：</strong>${escapeHtml(row.blankAnswer)}</p>
-          <p><strong>解説：</strong>${escapeHtml(row.explanation)}</p>
-        </details>
-        <div class="teacher-question-actions">
-          <button class="ghost-button" type="button" data-restore-key="${escapeHtml(row.key)}">この問題を元に戻す</button>
-        </div>
-      </article>`;
+      </details>`;
   }).join("");
 
   $$('[data-restore-key]').forEach(button => {
     button.addEventListener("click", () => restoreOne(button.dataset.restoreKey));
+  });
+}
+
+
+function openAllQuestionCards() {
+  $$(".editor-question-card").forEach(card => {
+    card.open = true;
+  });
+}
+
+function closeAllQuestionCards() {
+  $$(".editor-question-card").forEach(card => {
+    card.open = false;
   });
 }
 

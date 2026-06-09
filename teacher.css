@@ -194,3 +194,66 @@
     flex-direction: column;
   }
 }
+
+
+.editor-question-card > summary.editor-question-summary {
+  list-style: none;
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: minmax(180px, auto) 1fr;
+  gap: 12px;
+  align-items: center;
+}
+.editor-question-card > summary.editor-question-summary::-webkit-details-marker {
+  display: none;
+}
+.editor-question-card > summary.editor-question-summary::after {
+  content: "開く";
+  justify-self: end;
+  border-radius: 999px;
+  background: rgba(120, 76, 38, 0.10);
+  color: #6d4b30;
+  padding: 5px 11px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.editor-question-card[open] > summary.editor-question-summary::after {
+  content: "閉じる";
+}
+.editor-summary-left {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.editor-summary-text {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.editor-summary-text strong,
+.editor-summary-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor-summary-text strong {
+  color: #3f2a18;
+}
+.editor-summary-text small {
+  color: #766452;
+  font-size: 0.86rem;
+}
+.editor-card-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(120, 76, 38, 0.22);
+}
+@media (max-width: 760px) {
+  .editor-question-card > summary.editor-question-summary {
+    grid-template-columns: 1fr;
+  }
+  .editor-question-card > summary.editor-question-summary::after {
+    justify-self: start;
+  }
+}
