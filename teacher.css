@@ -257,3 +257,40 @@
     justify-self: start;
   }
 }
+
+/* v3.10: question editor pagination */
+.editor-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid rgba(114, 72, 32, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 250, 238, 0.82);
+  flex-wrap: wrap;
+}
+.editor-page-status {
+  font-weight: 700;
+  color: #6b4423;
+  min-width: 220px;
+  text-align: center;
+}
+.editor-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+@media (max-width: 640px) {
+  .editor-pagination {
+    gap: 8px;
+  }
+  .editor-page-status {
+    width: 100%;
+    min-width: 0;
+    order: -1;
+  }
+  .editor-pagination .ghost-button {
+    flex: 1 1 130px;
+  }
+}

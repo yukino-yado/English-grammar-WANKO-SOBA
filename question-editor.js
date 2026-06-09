@@ -36,6 +36,9 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 let teacherPackage = loadPackage();
 let visibleRows = [];
 let hasSearched = false;
+let currentPage = 1;
+const EDITOR_PAGE_SIZE = 50;
+let totalFilteredRows = [];
 let cloudSaveTimer = null;
 let loadingSharedData = false;
 
@@ -312,6 +315,8 @@ function clearEditorResults() {
   const level = $("#editorLevel").value || "all";
   hasSearched = false;
   visibleRows = [];
+  totalFilteredRows = [];
+  currentPage = 1;
   $("#editorListTitle").textContent = `中${grade}　${unit}`;
   $("#editorListSummary").textContent = `難易度：${LEVEL_LABELS[level] || level}。条件を選んで「検索する」を押してください。`;
   $("#editorQuestionList").innerHTML = `<div class="empty-suggestions">まだ検索していません。難易度・学年・単元を選び、必要なら検索語を入力してから「検索する」を押してください。</div>`;
@@ -319,6 +324,7 @@ function clearEditorResults() {
 
 function searchEditorQuestions() {
   hasSearched = true;
+  currentPage = 1;
   renderList();
 }
 
@@ -337,7 +343,7 @@ function renderList() {
   const query = normalizeText($("#editorSearch").value || "");
   const edits = getEditMap();
 
-  visibleRows = getEditorQuestionRows()
+  totalFilteredRows = getEditorQuestionRows()
     .filter(row => Number(row.grade) === grade && row.unit === unit)
     .filter(row => matchesLevel(row, level))
     .filter(row => {
@@ -348,18 +354,27 @@ function renderList() {
       return normalizeText(`${jp} ${en}`).includes(query);
     });
 
+  const totalPages = Math.max(1, Math.ceil(totalFilteredRows.length / EDITOR_PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  if (currentPage < 1) currentPage = 1;
+  const startIndex = (currentPage - 1) * EDITOR_PAGE_SIZE;
+  const endIndex = Math.min(startIndex + EDITOR_PAGE_SIZE, totalFilteredRows.length);
+  visibleRows = totalFilteredRows.slice(startIndex, endIndex);
+
   $("#editorListTitle").textContent = `中${grade}　${unit}`;
-  const editedCount = visibleRows.filter(row => edits.has(row.key)).length;
+  const editedCount = totalFilteredRows.filter(row => edits.has(row.key)).length;
   const searchText = query ? ` / 検索：「${$("#editorSearch").value.trim()}」` : "";
-  $("#editorListSummary").textContent = `難易度：${LEVEL_LABELS[level] || level}${searchText}。${visibleRows.length}問を表示中。編集済み ${editedCount}問。`;
+  const rangeText = totalFilteredRows.length ? `${startIndex + 1}〜${endIndex}問目` : "0問";
+  $("#editorListSummary").textContent = `難易度：${LEVEL_LABELS[level] || level}${searchText}。該当 ${totalFilteredRows.length}問中、${rangeText}を表示中。編集済み ${editedCount}問。`;
 
   const list = $("#editorQuestionList");
-  if (!visibleRows.length) {
+  if (!totalFilteredRows.length) {
     list.innerHTML = `<div class="empty-suggestions">該当する問題がありません。</div>`;
     return;
   }
 
-  list.innerHTML = visibleRows.map((row, index) => {
+  const paginationHtml = buildPaginationControls(totalFilteredRows.length, currentPage, totalPages);
+  list.innerHTML = paginationHtml + visibleRows.map((row, index) => {
     const edit = edits.get(row.key);
     const currentJp = edit?.jp || row.jp;
     const currentEn = edit?.fullSentence || row.fullSentence;
@@ -369,7 +384,7 @@ function renderList() {
       <details class="editor-question-card ${edited ? "is-edited" : ""}" data-key="${escapeHtml(row.key)}">
         <summary class="editor-question-summary">
           <span class="editor-summary-left">
-            <span class="shelf-mark">${sourceLabel} ${index + 1}</span>
+            <span class="shelf-mark">${sourceLabel} ${startIndex + index + 1}</span>
             <span class="shelf-mark level-mark">難易度：${escapeHtml(getLevelLabel(row.levelScope || row.level || "all"))}</span>
             ${edited ? `<span class="edit-badge">編集済み</span>` : `<span class="edit-badge muted-badge">未編集</span>`}
           </span>
@@ -402,13 +417,40 @@ function renderList() {
           </div>
         </div>
       </details>`;
-  }).join("");
+  }).join("") + paginationHtml;
+
+  bindPaginationButtons();
 
   $$('[data-restore-key]').forEach(button => {
     button.addEventListener("click", () => restoreOne(button.dataset.restoreKey));
   });
 }
 
+function buildPaginationControls(totalCount, page, totalPages) {
+  if (totalPages <= 1) return "";
+  const start = (page - 1) * EDITOR_PAGE_SIZE + 1;
+  const end = Math.min(page * EDITOR_PAGE_SIZE, totalCount);
+  return `
+    <div class="editor-pagination" role="navigation" aria-label="問題一覧のページ送り">
+      <button class="ghost-button" type="button" data-editor-page="prev" ${page <= 1 ? "disabled" : ""}>前の50題</button>
+      <span class="editor-page-status">${escapeHtml(String(start))}〜${escapeHtml(String(end))} / ${escapeHtml(String(totalCount))}題（${escapeHtml(String(page))}/${escapeHtml(String(totalPages))}ページ）</span>
+      <button class="ghost-button" type="button" data-editor-page="next" ${page >= totalPages ? "disabled" : ""}>次の50題</button>
+    </div>`;
+}
+
+function bindPaginationButtons() {
+  $$('[data-editor-page]').forEach(button => {
+    button.addEventListener('click', () => {
+      const direction = button.dataset.editorPage;
+      const totalPages = Math.max(1, Math.ceil(totalFilteredRows.length / EDITOR_PAGE_SIZE));
+      if (direction === 'prev' && currentPage > 1) currentPage -= 1;
+      if (direction === 'next' && currentPage < totalPages) currentPage += 1;
+      renderList();
+      const resultPanel = $('#editorQuestionList');
+      if (resultPanel) resultPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
 
 function openAllQuestionCards() {
   $$(".editor-question-card").forEach(card => {
