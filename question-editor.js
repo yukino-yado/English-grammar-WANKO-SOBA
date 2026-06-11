@@ -77,6 +77,9 @@ function normalizeEdit(item) {
   const fullSentence = normalizeEnglish(String(item.fullSentence || "").trim());
   if (!key || !jp || !fullSentence) return null;
   const levelScope = item.levelScope || item.level || null;
+  const blankSentence = item.blankSentence ? normalizeBlankSentence(String(item.blankSentence).trim()) : "";
+  const blankAnswer = item.blankAnswer ? String(item.blankAnswer).replace(/。/g, "").replace(/\s+/g, " ").trim() : "";
+  const choices = Array.isArray(item.choices) ? item.choices.map(String).filter(Boolean) : [];
   return {
     key,
     grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
@@ -85,10 +88,16 @@ function normalizeEdit(item) {
     levelScope,
     jp,
     fullSentence,
+    blankSentence,
+    blankAnswer,
+    choices,
     originalJp: String(item.originalJp || ""),
     originalFullSentence: String(item.originalFullSentence || ""),
+    originalBlankSentence: String(item.originalBlankSentence || ""),
+    originalBlankAnswer: String(item.originalBlankAnswer || ""),
     updatedAt: item.updatedAt || new Date().toISOString(),
-    teacherEdited: true
+    teacherEdited: true,
+    teacherBlankEdited: Boolean(blankSentence && blankAnswer)
   };
 }
 
@@ -378,6 +387,8 @@ function renderList() {
     const edit = edits.get(row.key);
     const currentJp = edit?.jp || row.jp;
     const currentEn = edit?.fullSentence || row.fullSentence;
+    const currentBlank = edit?.blankSentence || row.blankSentence || "";
+    const currentAnswer = edit?.blankAnswer || row.blankAnswer || "";
     const edited = Boolean(edit);
     const sourceLabel = row.generatedStored ? "生成済み問題" : "基準問題";
     return `
@@ -391,12 +402,15 @@ function renderList() {
           <span class="editor-summary-text">
             <strong>${escapeHtml(currentJp)}</strong>
             <small>${escapeHtml(currentEn)}</small>
+            <small>穴埋め：${escapeHtml(currentBlank)} / 答え：${escapeHtml(currentAnswer)}</small>
           </span>
         </summary>
         <div class="editor-card-body">
           <div class="editor-original-box">
             <p><strong>${row.generatedStored ? "生成時の日本語" : "元の日本語"}：</strong>${escapeHtml(row.jp)}</p>
             <p><strong>${row.generatedStored ? "生成時の英文" : "元の英文"}：</strong>${escapeHtml(row.fullSentence)}</p>
+            <p><strong>${row.generatedStored ? "生成時の穴埋め" : "元の穴埋め"}：</strong>${escapeHtml(row.blankSentence || "")}</p>
+            <p><strong>${row.generatedStored ? "生成時の答え" : "元の答え"}：</strong>${escapeHtml(row.blankAnswer || "")}</p>
           </div>
           <div class="editor-input-grid">
             <label>日本語文
@@ -405,11 +419,16 @@ function renderList() {
             <label>英文
               <textarea rows="3" data-field="fullSentence">${escapeHtml(currentEn)}</textarea>
             </label>
+            <label>穴埋め文（選択式・穴埋め式）
+              <textarea rows="3" data-field="blankSentence">${escapeHtml(currentBlank)}</textarea>
+            </label>
+            <label>穴埋めの答え
+              <textarea rows="3" data-field="blankAnswer">${escapeHtml(currentAnswer)}</textarea>
+            </label>
           </div>
+          <p class="editor-help-text">空欄は <strong>___</strong> で入力します。空欄の数と答えの英単語数をそろえてください。例：<code>She is ___ ___ music now.</code> / 答え：<code>listening to</code></p>
           <details class="editor-reference">
-            <summary>穴埋め・答え・解説を確認</summary>
-            <p><strong>穴埋め：</strong>${escapeHtml(row.blankSentence)}</p>
-            <p><strong>答え：</strong>${escapeHtml(row.blankAnswer)}</p>
+            <summary>解説を確認</summary>
             <p><strong>解説：</strong>${escapeHtml(row.explanation)}</p>
           </details>
           <div class="teacher-question-actions">
@@ -474,9 +493,14 @@ function saveVisibleEdits() {
     if (!row) return;
     const jp = sanitizeJapanese(card.querySelector('[data-field="jp"]').value.trim());
     const fullSentence = normalizeEnglish(card.querySelector('[data-field="fullSentence"]').value.trim());
-    if (!jp || !fullSentence) return;
+    const blankSentence = normalizeBlankSentence(card.querySelector('[data-field="blankSentence"]').value.trim());
+    const blankAnswer = String(card.querySelector('[data-field="blankAnswer"]').value || "").replace(/。/g, "").replace(/\s+/g, " ").trim();
+    if (!jp || !fullSentence || !blankSentence || !blankAnswer) return;
 
-    const sameAsOriginal = normalizeText(jp) === normalizeText(row.jp) && normalizeEnglish(fullSentence) === normalizeEnglish(row.fullSentence);
+    const sameAsOriginal = normalizeText(jp) === normalizeText(row.jp)
+      && normalizeEnglish(fullSentence) === normalizeEnglish(row.fullSentence)
+      && normalizeBlankComparable(blankSentence) === normalizeBlankComparable(row.blankSentence || "")
+      && normalizeText(blankAnswer) === normalizeText(row.blankAnswer || "");
     if (sameAsOriginal) {
       if (editMap.delete(key)) changed++;
       return;
@@ -490,10 +514,16 @@ function saveVisibleEdits() {
       levelScope: row.levelScope || row.level || null,
       jp,
       fullSentence,
+      blankSentence,
+      blankAnswer,
+      choices: uniqueTokens(blankAnswer),
       originalJp: row.jp,
       originalFullSentence: row.fullSentence,
+      originalBlankSentence: row.blankSentence || "",
+      originalBlankAnswer: row.blankAnswer || "",
       updatedAt: new Date().toISOString(),
-      teacherEdited: true
+      teacherEdited: true,
+      teacherBlankEdited: true
     });
     changed++;
   });
@@ -541,6 +571,20 @@ function normalizeEnglish(value) {
   const trimmed = String(value || "").replace(/。/g, "").replace(/\s+/g, " ").trim();
   if (!trimmed) return "";
   return /[.?!]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function normalizeBlankSentence(value) {
+  const trimmed = String(value || "").replace(/。/g, "").replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  return /[.?!]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function normalizeBlankComparable(value) {
+  return String(value || "").trim().toLowerCase().replace(/[.?!。！？]/g, "").replace(/\s+/g, " ");
+}
+
+function uniqueTokens(value) {
+  return [...new Set(String(value || "").replace(/[.?!]/g, "").split(/\s+/).map(x => x.trim()).filter(Boolean))];
 }
 
 function sanitizeJapanese(value) {

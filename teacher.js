@@ -302,16 +302,28 @@ function normalizeEditedQuestion(item) {
   const jp = stripBadJapanese(String(item.jp || "").trim());
   const fullSentence = normalizeEnglish(String(item.fullSentence || "").trim());
   if (!key || !jp || !fullSentence) return null;
+  const levelScope = item.levelScope || item.level || null;
+  const blankSentence = item.blankSentence ? normalizeEnglish(String(item.blankSentence || "").trim()) : "";
+  const blankAnswer = item.blankAnswer ? String(item.blankAnswer || "").replace(/。/g, "").replace(/\s+/g, " ").trim() : "";
+  const choices = Array.isArray(item.choices) ? item.choices.map(String).filter(Boolean) : [];
   return {
     key,
     grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
     unit: String(item.unit || ""),
+    level: levelScope || null,
+    levelScope,
     jp,
     fullSentence,
+    blankSentence,
+    blankAnswer,
+    choices,
     originalJp: String(item.originalJp || ""),
     originalFullSentence: String(item.originalFullSentence || ""),
+    originalBlankSentence: String(item.originalBlankSentence || ""),
+    originalBlankAnswer: String(item.originalBlankAnswer || ""),
     updatedAt: item.updatedAt || null,
-    teacherEdited: true
+    teacherEdited: true,
+    teacherBlankEdited: Boolean(blankSentence && blankAnswer)
   };
 }
 

@@ -1090,6 +1090,11 @@ function normalizeEditedQuestion(item) {
   const fullSentence = ensurePunctuation(String(item.fullSentence || "").replace(/。/g, "").replace(/\s+/g, " ").trim());
   if (!key || !jp || !fullSentence) return null;
   const levelScope = item.levelScope || item.level || null;
+  const rawBlankSentence = String(item.blankSentence || "").replace(/。/g, "").replace(/\s+/g, " ").trim();
+  const rawBlankAnswer = String(item.blankAnswer || "").replace(/。/g, "").replace(/\s+/g, " ").trim();
+  const blankSentence = rawBlankSentence && rawBlankAnswer ? expandBlankSlotsForAnswer(ensurePunctuation(rawBlankSentence), rawBlankAnswer) : "";
+  const blankAnswer = rawBlankSentence && rawBlankAnswer ? rawBlankAnswer : "";
+  const choices = Array.isArray(item.choices) ? item.choices.map(String).filter(Boolean) : [];
   return {
     key,
     grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
@@ -1098,10 +1103,16 @@ function normalizeEditedQuestion(item) {
     levelScope,
     jp,
     fullSentence,
+    blankSentence,
+    blankAnswer,
+    choices,
     originalJp: String(item.originalJp || ""),
     originalFullSentence: String(item.originalFullSentence || ""),
+    originalBlankSentence: String(item.originalBlankSentence || ""),
+    originalBlankAnswer: String(item.originalBlankAnswer || ""),
     updatedAt: item.updatedAt || null,
-    teacherEdited: true
+    teacherEdited: true,
+    teacherBlankEdited: Boolean(blankSentence && blankAnswer)
   };
 }
 
@@ -1131,12 +1142,24 @@ function applyEditedQuestionOverride(question) {
   });
   const edit = byKey || byOriginal;
   if (!edit) return question;
-  return {
+  const next = {
     ...question,
     jp: edit.jp || question.jp,
     fullSentence: ensurePunctuation(edit.fullSentence || question.fullSentence),
     teacherEdited: true
   };
+  if (edit.blankSentence && edit.blankAnswer) {
+    next.blankAnswer = edit.blankAnswer;
+    next.blankSentence = expandBlankSlotsForAnswer(edit.blankSentence, edit.blankAnswer);
+    next.choices = unique([
+      ...tokenize(edit.blankAnswer),
+      ...(Array.isArray(edit.choices) ? edit.choices : []),
+      ...(Array.isArray(question.choices) ? question.choices : [])
+    ]);
+    next.teacherBlankEdited = true;
+    next.explanation = alignGeneratedExplanation(question.explanation, edit.blankAnswer);
+  }
+  return next;
 }
 
 
@@ -27109,7 +27132,7 @@ function applyCoreBlank(question, phrase, extraChoices = []) {
 }
 
 function enforceCoreBlankPolicy(question) {
-  if (!question || question.teacherMade) return question;
+  if (!question || question.teacherMade || question.teacherBlankEdited) return question;
   const unit = String(question.unit || "");
   const full = String(question.fullSentence || "");
 

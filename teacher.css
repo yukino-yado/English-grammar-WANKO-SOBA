@@ -174,6 +174,19 @@
   width: 100%;
   resize: vertical;
 }
+
+.editor-help-text {
+  margin: 10px 0 0;
+  color: #6f5a46;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.editor-help-text code {
+  background: rgba(120, 76, 38, 0.08);
+  border-radius: 8px;
+  padding: 2px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
 .editor-reference {
   margin-top: 12px;
   background: rgba(255, 255, 255, 0.55);
