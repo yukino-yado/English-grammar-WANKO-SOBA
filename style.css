@@ -62,6 +62,27 @@ button {
   margin-bottom: 24px;
 }
 
+.hero-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.hero-brand > div {
+  min-width: 0;
+}
+
+.app-logo {
+  width: 78px;
+  height: 78px;
+  border-radius: 22px;
+  object-fit: cover;
+  flex: 0 0 auto;
+  box-shadow: 0 14px 32px rgba(78, 52, 32, 0.18);
+  background: #fff8eb;
+}
+
 .hero h1 {
   margin: 4px 0 6px;
   font-size: clamp(2.2rem, 5vw, 4rem);
@@ -1978,5 +1999,25 @@ button {
   .unit-understanding-track {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+
+
+@media (max-width: 520px) {
+  .hero-brand {
+    gap: 12px;
+  }
+
+  .app-logo {
+    width: 58px;
+    height: 58px;
+    border-radius: 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .hero-brand {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
