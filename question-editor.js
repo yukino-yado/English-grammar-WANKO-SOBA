@@ -41,6 +41,8 @@ const EDITOR_PAGE_SIZE = 50;
 let totalFilteredRows = [];
 let cloudSaveTimer = null;
 let loadingSharedData = false;
+let sharedStatusText = "共有データ確認中";
+let sharedStatusError = false;
 
 function init() {
   populateFilters();
@@ -109,20 +111,99 @@ function savePackage(message = "保存しました。", options = {}) {
   if (!options.localOnly) queueCloudSave();
 }
 
+function getCloudPackagePayload(payload) {
+  return normalizePackage(payload && payload.package ? payload.package : payload);
+}
+
+function packageTime(pkg) {
+  const time = Date.parse(pkg?.updatedAt || "");
+  return Number.isFinite(time) ? time : 0;
+}
+
+function packageHasContent(pkg) {
+  return Boolean(
+    Object.keys(pkg?.menuOverrides || {}).length ||
+    (Array.isArray(pkg?.questions) && pkg.questions.length) ||
+    (Array.isArray(pkg?.editedQuestions) && pkg.editedQuestions.length)
+  );
+}
+
+function mergeTeacherPackages(localPkg, cloudPkg) {
+  const local = normalizePackage(localPkg || {});
+  const cloud = normalizePackage(cloudPkg || {});
+  const localTime = packageTime(local);
+  const cloudTime = packageTime(cloud);
+  const preferCloud = cloudTime >= localTime;
+
+  const questionMap = new Map();
+  const putQuestion = (q) => {
+    if (!q || typeof q !== "object") return;
+    const key = String(q.id || q.key || q.fullSentence || JSON.stringify(q));
+    questionMap.set(key, q);
+  };
+  (preferCloud ? local.questions : cloud.questions).forEach(putQuestion);
+  (preferCloud ? cloud.questions : local.questions).forEach(putQuestion);
+
+  const editMap = new Map();
+  [...(local.editedQuestions || []), ...(cloud.editedQuestions || [])].forEach(item => {
+    const normalized = normalizeEdit(item);
+    if (!normalized) return;
+    const current = editMap.get(normalized.key);
+    if (!current || packageTime(normalized) >= packageTime(current)) editMap.set(normalized.key, normalized);
+  });
+
+  const latest = Math.max(localTime, cloudTime, 0);
+  return normalizePackage({
+    version: 3,
+    updatedAt: latest ? new Date(latest).toISOString() : null,
+    menuOverrides: preferCloud ? { ...local.menuOverrides, ...cloud.menuOverrides } : { ...cloud.menuOverrides, ...local.menuOverrides },
+    questions: [...questionMap.values()],
+    editedQuestions: [...editMap.values()]
+  });
+}
+
+async function responseErrorMessage(response) {
+  try {
+    const data = await response.json();
+    return [data.message, data.detail, data.code].filter(Boolean).join(" / ") || `HTTP ${response.status}`;
+  } catch (_) {
+    try {
+      const text = await response.text();
+      return text || `HTTP ${response.status}`;
+    } catch (__) {
+      return `HTTP ${response.status}`;
+    }
+  }
+}
+
+function setSharedStatus(message, isError = false) {
+  sharedStatusText = message;
+  sharedStatusError = isError;
+  showMessage(message);
+}
+
 async function loadCloudPackage() {
   if (loadingSharedData) return;
   loadingSharedData = true;
   try {
-    const response = await fetch(TEACHER_CLOUD_ENDPOINT, { cache: "no-store" });
-    if (!response.ok) throw new Error(await response.text());
+    const localBeforeLoad = normalizePackage(teacherPackage);
+    const response = await fetch(`${TEACHER_CLOUD_ENDPOINT}?t=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(await responseErrorMessage(response));
     const data = await response.json();
-    teacherPackage = normalizePackage(data);
+    const cloudPackage = getCloudPackagePayload(data);
+    const merged = mergeTeacherPackages(localBeforeLoad, cloudPackage);
+    const shouldBackUpLocal = packageHasContent(localBeforeLoad) && packageTime(localBeforeLoad) > packageTime(cloudPackage);
+    teacherPackage = merged;
     localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
-    clearEditorResults();
-    showMessage(teacherPackage.updatedAt ? "共有データを読み込みました。" : "共有データはまだ空です。ここで編集すると全端末に保存されます。");
+    const countText = `追加${teacherPackage.questions.length}件・編集${teacherPackage.editedQuestions.length}件`;
+    const dateText = teacherPackage.updatedAt ? new Date(teacherPackage.updatedAt).toLocaleString("ja-JP") : "未保存";
+    setSharedStatus(`共有データ読込OK：${countText} / 最終更新 ${dateText}`, false);
+    if (hasSearched) renderList();
+    else clearEditorResults();
+    if (shouldBackUpLocal) queueCloudSave();
   } catch (error) {
     console.warn("共有データの読み込みに失敗しました。", error);
-    showMessage("共有データを読み込めませんでした。Vercel Blobの設定を確認してください。");
+    setSharedStatus(`共有データ読込NG：${error.message || error}`, true);
   } finally {
     loadingSharedData = false;
   }
@@ -138,18 +219,20 @@ async function saveCloudPackage() {
     const response = await fetch(TEACHER_CLOUD_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(teacherPackage)
+      body: JSON.stringify({ package: teacherPackage })
     });
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) throw new Error(await responseErrorMessage(response));
     const result = await response.json();
     if (result && result.package) {
       teacherPackage = normalizePackage(result.package);
       localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
     }
-    showMessage("共有データへ保存しました。別端末でも同じ内容を読み込めます。");
+    const countText = `追加${teacherPackage.questions.length}件・編集${teacherPackage.editedQuestions.length}件`;
+    const dateText = teacherPackage.updatedAt ? new Date(teacherPackage.updatedAt).toLocaleString("ja-JP") : "未保存";
+    setSharedStatus(`共有データ保存OK：${countText} / 最終更新 ${dateText}`, false);
   } catch (error) {
     console.warn("共有データの保存に失敗しました。", error);
-    showMessage("この端末には保存しましたが、共有データへの保存に失敗しました。");
+    setSharedStatus(`共有データ保存NG：${error.message || error}`, true);
   }
 }
 
@@ -180,6 +263,7 @@ function bindEvents() {
   $("#closeAllQuestionsBtn").addEventListener("click", closeAllQuestionCards);
   $("#resetVisibleBtn").addEventListener("click", resetVisibleEdits);
   $("#exportEditorBtn").addEventListener("click", exportPackage);
+  if ($("#loadEditorCloudBtn")) $("#loadEditorCloudBtn").addEventListener("click", loadCloudPackage);
 }
 
 function updateUnitOptions() {

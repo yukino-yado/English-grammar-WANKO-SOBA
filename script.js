@@ -1165,9 +1165,10 @@ function applyEditedQuestionOverride(question) {
 
 async function syncTeacherPackageFromCloud() {
   try {
-    const response = await fetch(TEACHER_CLOUD_ENDPOINT, { cache: "no-store" });
+    const response = await fetch(`${TEACHER_CLOUD_ENDPOINT}?t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) return;
-    const packageData = await response.json();
+    const payload = await response.json();
+    const packageData = payload && payload.package ? payload.package : payload;
     localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(packageData));
     const changed = applyTeacherPackage(packageData, { persistProgress: false });
     if (changed) {

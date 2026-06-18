@@ -307,3 +307,12 @@
     flex: 1 1 130px;
   }
 }
+
+.teacher-status-card.status-error {
+  border-color: rgba(190, 64, 48, 0.45);
+  background: rgba(255, 236, 232, 0.95);
+}
+
+.teacher-status-card.status-error strong {
+  color: #982d22;
+}

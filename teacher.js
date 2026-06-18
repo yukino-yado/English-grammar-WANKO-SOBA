@@ -50,6 +50,8 @@ let teacherPackage = loadPackage();
 let suggestions = [];
 let cloudSaveTimer = null;
 let loadingSharedData = false;
+let sharedStatusText = "共有データ確認中";
+let sharedStatusError = false;
 
 function loadPackage() {
   try {
@@ -83,11 +85,84 @@ function normalizePackage(data) {
 }
 
 function savePackage(message = "保存しました。", options = {}) {
+  teacherPackage.version = 3;
   teacherPackage.updatedAt = new Date().toISOString();
   localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
   renderAll();
   showMessage(message);
   if (!options.localOnly) queueCloudSave();
+}
+
+function getCloudPackagePayload(payload) {
+  return normalizePackage(payload && payload.package ? payload.package : payload);
+}
+
+function packageTime(pkg) {
+  const time = Date.parse(pkg?.updatedAt || "");
+  return Number.isFinite(time) ? time : 0;
+}
+
+function packageHasContent(pkg) {
+  return Boolean(
+    Object.keys(pkg?.menuOverrides || {}).length ||
+    (Array.isArray(pkg?.questions) && pkg.questions.length) ||
+    (Array.isArray(pkg?.editedQuestions) && pkg.editedQuestions.length)
+  );
+}
+
+function mergeTeacherPackages(localPkg, cloudPkg) {
+  const local = normalizePackage(localPkg || {});
+  const cloud = normalizePackage(cloudPkg || {});
+  const localTime = packageTime(local);
+  const cloudTime = packageTime(cloud);
+  const preferCloud = cloudTime >= localTime;
+
+  const questionMap = new Map();
+  const putQuestion = (q) => {
+    const normalized = normalizeQuestion(q);
+    if (!normalized) return;
+    const key = normalized.id || normalizeText(normalized.fullSentence);
+    questionMap.set(key, normalized);
+  };
+  (preferCloud ? local.questions : cloud.questions).forEach(putQuestion);
+  (preferCloud ? cloud.questions : local.questions).forEach(putQuestion);
+
+  const editMap = new Map();
+  [...(local.editedQuestions || []), ...(cloud.editedQuestions || [])].forEach(item => {
+    const normalized = normalizeEditedQuestion(item);
+    if (!normalized) return;
+    const current = editMap.get(normalized.key);
+    if (!current || packageTime(normalized) >= packageTime(current)) editMap.set(normalized.key, normalized);
+  });
+
+  const latest = Math.max(localTime, cloudTime, 0);
+  return normalizePackage({
+    version: 3,
+    updatedAt: latest ? new Date(latest).toISOString() : null,
+    menuOverrides: preferCloud ? { ...local.menuOverrides, ...cloud.menuOverrides } : { ...cloud.menuOverrides, ...local.menuOverrides },
+    questions: [...questionMap.values()],
+    editedQuestions: [...editMap.values()]
+  });
+}
+
+async function responseErrorMessage(response) {
+  try {
+    const data = await response.json();
+    return [data.message, data.detail, data.code].filter(Boolean).join(" / ") || `HTTP ${response.status}`;
+  } catch (_) {
+    try {
+      const text = await response.text();
+      return text || `HTTP ${response.status}`;
+    } catch (__) {
+      return `HTTP ${response.status}`;
+    }
+  }
+}
+
+function setSharedStatus(message, isError = false) {
+  sharedStatusText = message;
+  sharedStatusError = isError;
+  renderAll();
 }
 
 function init() {
@@ -103,17 +178,26 @@ async function loadCloudPackage() {
   if (loadingSharedData) return;
   loadingSharedData = true;
   try {
-    const response = await fetch(TEACHER_CLOUD_ENDPOINT, { cache: "no-store" });
-    if (!response.ok) throw new Error(await response.text());
+    const localBeforeLoad = normalizePackage(teacherPackage);
+    const response = await fetch(`${TEACHER_CLOUD_ENDPOINT}?t=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(await responseErrorMessage(response));
     const data = await response.json();
-    teacherPackage = normalizePackage(data);
+    const cloudPackage = getCloudPackagePayload(data);
+    const merged = mergeTeacherPackages(localBeforeLoad, cloudPackage);
+    const shouldBackUpLocal = packageHasContent(localBeforeLoad) && packageTime(localBeforeLoad) > packageTime(cloudPackage);
+    teacherPackage = merged;
     localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
     loadMenuEditor();
     renderAll();
-    showMessage(teacherPackage.updatedAt ? "共有データを読み込みました。" : "共有データはまだ空です。ここで編集すると全端末に保存されます。");
+    const countText = `追加${teacherPackage.questions.length}件・編集${teacherPackage.editedQuestions.length}件`;
+    const dateText = teacherPackage.updatedAt ? new Date(teacherPackage.updatedAt).toLocaleString("ja-JP") : "未保存";
+    setSharedStatus(`共有データ読込OK：${countText} / 最終更新 ${dateText}`, false);
+    showMessage(teacherPackage.updatedAt ? `共有データを読み込みました。${countText}` : "共有データはまだ空です。ここで編集すると全端末に保存されます。");
+    if (shouldBackUpLocal) queueCloudSave();
   } catch (error) {
     console.warn("共有データの読み込みに失敗しました。", error);
-    showMessage("共有データを読み込めませんでした。Vercel Blobの設定を確認してください。", true);
+    setSharedStatus(`共有データ読込NG：${error.message || error}`, true);
+    showMessage(`共有データを読み込めませんでした。この端末の保存データは残しています。原因：${error.message || error}`, true);
   } finally {
     loadingSharedData = false;
   }
@@ -129,19 +213,23 @@ async function saveCloudPackage() {
     const response = await fetch(TEACHER_CLOUD_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(teacherPackage)
+      body: JSON.stringify({ package: teacherPackage })
     });
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) throw new Error(await responseErrorMessage(response));
     const result = await response.json();
     if (result && result.package) {
       teacherPackage = normalizePackage(result.package);
       localStorage.setItem(TEACHER_PACKAGE_KEY, JSON.stringify(teacherPackage));
       renderAll();
     }
+    const countText = `追加${teacherPackage.questions.length}件・編集${teacherPackage.editedQuestions.length}件`;
+    const dateText = teacherPackage.updatedAt ? new Date(teacherPackage.updatedAt).toLocaleString("ja-JP") : "未保存";
+    setSharedStatus(`共有データ保存OK：${countText} / 最終更新 ${dateText}`, false);
     showMessage("共有データへ保存しました。別端末でも同じ内容を読み込めます。");
   } catch (error) {
     console.warn("共有データの保存に失敗しました。", error);
-    showMessage("この端末には保存しましたが、共有データへの保存に失敗しました。", true);
+    setSharedStatus(`共有データ保存NG：${error.message || error}`, true);
+    showMessage(`この端末には保存しましたが、共有データへの保存に失敗しました。原因：${error.message || error}`, true);
   }
 }
 
@@ -175,6 +263,7 @@ function bindEvents() {
   $("#resetMenuBtn").addEventListener("click", resetMenuEditor);
   $("#addQuestionBtn").addEventListener("click", addManualQuestion);
   $("#syncBtn").addEventListener("click", () => savePackage("生徒版へ反映しました。共有データにも保存します。"));
+  if ($("#loadCloudBtn")) $("#loadCloudBtn").addEventListener("click", loadCloudPackage);
   $("#exportBtn").addEventListener("click", exportPackage);
   $("#importBtn").addEventListener("click", () => $("#importPackageInput").click());
   $("#importPackageInput").addEventListener("change", importPackageFile);
@@ -210,6 +299,7 @@ function renderStatus() {
     <div class="teacher-status-card"><span>お品書き編集</span><strong>${menuCount}</strong></div>
     <div class="teacher-status-card"><span>裏お品書き</span><strong>${secretCount}</strong></div>
     <div class="teacher-status-card"><span>最終反映</span><strong style="font-size:1rem;">${escapeHtml(date)}</strong></div>
+    <div class="teacher-status-card ${sharedStatusError ? "status-error" : ""}"><span>共有保存</span><strong style="font-size:0.9rem;">${escapeHtml(sharedStatusText)}</strong></div>
     <div class="teacher-status-card"><span>連携先</span><strong style="font-size:1rem;">index.html</strong></div>
   `;
 }
