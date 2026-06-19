@@ -1,4 +1,4 @@
-import { list, put } from '@vercel/blob';
+import { get, list, put } from '@vercel/blob';
 
 const PATHNAME = 'wankosoba/teacher-package.json';
 
@@ -22,15 +22,15 @@ function normalizePackage(data) {
   return next;
 }
 
-function hasBlobToken() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
-}
-
 function blobOptions(extra = {}) {
-  return {
-    token: process.env.BLOB_READ_WRITE_TOKEN,
-    ...extra
-  };
+  // 2026年以降のVercel Blobは、接続済みプロジェクトではOIDC認証が標準になっており、
+  // BLOB_READ_WRITE_TOKEN が環境変数に表示されない場合があります。
+  // token を明示しないことで、Vercel Functions 側の自動認証または従来の環境変数認証に任せます。
+  const options = { ...extra };
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    options.token = process.env.BLOB_READ_WRITE_TOKEN;
+  }
+  return options;
 }
 
 async function readBody(req) {
@@ -43,44 +43,56 @@ async function readBody(req) {
 }
 
 async function readStoredPackage() {
-  const result = await list(blobOptions({ prefix: PATHNAME, limit: 100 }));
-  const blobs = Array.isArray(result?.blobs) ? result.blobs : [];
-  const target = blobs.find(blob => blob.pathname === PATHNAME) || blobs.find(blob => String(blob.pathname || '').endsWith('/teacher-package.json'));
-  if (!target) return emptyPackage();
-
-  const url = target.downloadUrl || target.url;
-  if (!url) throw new Error('共有データのURLを取得できませんでした。');
-
-  const readUrl = `${url}${String(url).includes('?') ? '&' : '?'}t=${Date.now()}`;
-  const response = await fetch(readUrl, { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`共有データの取得に失敗しました。HTTP ${response.status}`);
+  // Private Blob Storeの場合はURLを直接fetchできないため、まずSDKのget()で読む。
+  // 既存のPublic保存データが残っている可能性もあるため、失敗時だけ旧方式にフォールバックする。
+  try {
+    const result = await get(PATHNAME, blobOptions({ access: 'private' }));
+    if (result?.stream) {
+      const response = new Response(result.stream);
+      const text = await response.text();
+      return normalizePackage(text ? JSON.parse(text) : {});
+    }
+  } catch (error) {
+    const message = String(error?.message || error || '');
+    if (!/not found|404|NoSuch|does not exist/i.test(message)) {
+      throw error;
+    }
   }
-  const text = await response.text();
-  return normalizePackage(text ? JSON.parse(text) : {});
+
+  try {
+    const result = await list(blobOptions({ prefix: PATHNAME, limit: 100 }));
+    const blobs = Array.isArray(result?.blobs) ? result.blobs : [];
+    const target = blobs.find(blob => blob.pathname === PATHNAME) || blobs.find(blob => String(blob.pathname || '').endsWith('/teacher-package.json'));
+    if (!target) return emptyPackage();
+
+    const url = target.downloadUrl || target.url;
+    if (!url) return emptyPackage();
+
+    const readUrl = `${url}${String(url).includes('?') ? '&' : '?'}t=${Date.now()}`;
+    const response = await fetch(readUrl, { cache: 'no-store' });
+    if (!response.ok) return emptyPackage();
+    const text = await response.text();
+    return normalizePackage(text ? JSON.parse(text) : {});
+  } catch (error) {
+    const message = String(error?.message || error || '');
+    if (/not found|404|NoSuch|does not exist/i.test(message)) return emptyPackage();
+    throw error;
+  }
 }
 
 async function writeStoredPackage(data) {
   const normalized = normalizePackage(data);
   normalized.updatedAt = new Date().toISOString();
 
-  // public にしておくと、別端末からの読み込み時も署名URLまわりで詰まりにくいです。
-  // URLはアプリ内API経由で扱うため、画面には直接表示しません。
+  // 教師用の編集データなのでPrivate Blob Storeへ保存します。
+  // Vercel Functions上ではOIDC認証、または従来のBLOB_READ_WRITE_TOKEN認証で読み書きします。
   await put(PATHNAME, JSON.stringify(normalized, null, 2), blobOptions({
-    access: 'public',
+    access: 'private',
     allowOverwrite: true,
     contentType: 'application/json',
     cacheControlMaxAge: 60
   }));
   return normalized;
-}
-
-function sendMissingToken(res) {
-  res.status(500).json({
-    ok: false,
-    code: 'BLOB_TOKEN_MISSING',
-    message: '共有保存が未設定です。Vercel の Storage で Blob を作成し、BLOB_READ_WRITE_TOKEN を Environment Variables に設定してください。'
-  });
 }
 
 export default async function handler(req, res) {
@@ -90,11 +102,6 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
-    return;
-  }
-
-  if (!hasBlobToken()) {
-    sendMissingToken(res);
     return;
   }
 

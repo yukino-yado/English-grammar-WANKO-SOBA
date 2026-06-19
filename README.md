@@ -96,7 +96,7 @@ ZIPを解凍して、以下のファイルをブラウザで開きます。
 3. 同じ端末で index.html を開く
 4. 生徒用に追加問題が反映される
 
-※v3.3では Vercel Blob を使った共有保存に対応しました。Vercel側でBlob Storageを作成し、`BLOB_READ_WRITE_TOKEN` が有効な状態でデプロイしてください。
+※v3.3では Vercel Blob を使った共有保存に対応しました。Vercel側でBlob Storageを作成し、プロジェクトに接続した状態でデプロイしてください。新しいVercelではOIDC認証が標準のため、`BLOB_READ_WRITE_TOKEN` がEnvironment Variablesに表示されない場合があります。
 
 ## ファイル構成
 
@@ -173,7 +173,7 @@ ZIPを解凍して、以下のファイルをブラウザで開きます。
 
 1. Vercelのプロジェクトを開く。
 2. StorageからBlobを作成する。
-3. 作成時に `BLOB_READ_WRITE_TOKEN` をこのプロジェクトのEnvironment Variableとして有効にする。
+3. 作成時にこのプロジェクトへ接続する。新しいVercelではOIDC認証が使われ、`BLOB_READ_WRITE_TOKEN` が表示されない場合があります。
 4. GitHubへv3.3のファイルを上書きして再デプロイする。
 5. 教師用で保存すると、共有データへ保存されます。
 
