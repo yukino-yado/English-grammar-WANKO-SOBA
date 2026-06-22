@@ -1,6 +1,6 @@
 import { get, list, put } from '@vercel/blob';
 
-const API_VERSION = 'v3.17-public-read-access-fix';
+const API_VERSION = 'v3.18-edit-persistence-fix';
 const PATHNAME = 'wankosoba/teacher-package.json';
 const WRITE_ACCESS = 'public';
 

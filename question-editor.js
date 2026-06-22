@@ -84,6 +84,8 @@ function normalizeEdit(item) {
   const choices = Array.isArray(item.choices) ? item.choices.map(String).filter(Boolean) : [];
   return {
     key,
+    originalKey: item.originalKey || key,
+    matchKeys: Array.isArray(item.matchKeys) ? item.matchKeys.map(String).filter(Boolean) : [],
     grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
     unit: String(item.unit || ""),
     level: levelScope || null,
@@ -273,7 +275,121 @@ function updateUnitOptions() {
 }
 
 function getEditMap() {
-  return new Map((teacherPackage.editedQuestions || []).map(item => [item.key, item]));
+  const map = new Map();
+  (teacherPackage.editedQuestions || []).forEach(item => {
+    const normalized = normalizeEdit(item);
+    if (!normalized) return;
+    getEditMatchKeys(normalized).forEach(key => map.set(key, normalized));
+  });
+  return map;
+}
+
+function stableLevelScope(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join("|") || "all";
+  return String(value || "all").trim() || "all";
+}
+
+function canonicalEditSignature({ grade, unit, levelScope, level, jp, fullSentence }) {
+  return [
+    "canonical",
+    String(grade || ""),
+    String(unit || ""),
+    stableLevelScope(levelScope || level || "all"),
+    normalizeText(jp || ""),
+    normalizeText(fullSentence || "")
+  ].join("::");
+}
+
+function sourceEditSignature({ grade, unit, levelScope, level, originalJp, originalFullSentence, jp, fullSentence }) {
+  return canonicalEditSignature({
+    grade,
+    unit,
+    levelScope,
+    level,
+    jp: originalJp || jp,
+    fullSentence: originalFullSentence || fullSentence
+  });
+}
+
+function looseEditSignature({ grade, unit, originalFullSentence, fullSentence }) {
+  return [
+    "loose",
+    String(grade || ""),
+    String(unit || ""),
+    normalizeText(originalFullSentence || fullSentence || "")
+  ].join("::");
+}
+
+function stripGeneratedKeyAliases(key) {
+  const value = String(key || "").trim();
+  if (!value) return [];
+  const keys = [value];
+  const homeMatch = value.match(/^home-generated::(?:small|medium|large|extra)::(.+)$/);
+  if (homeMatch) keys.push(homeMatch[1]);
+  const levelMatch = value.match(/^(.*)::level::(small|medium|large|extra)$/);
+  if (levelMatch) keys.push(levelMatch[1], `${levelMatch[1]}::level::${levelMatch[2]}`);
+  return keys;
+}
+
+function uniqueKeys(keys) {
+  return [...new Set(keys.map(key => String(key || "").trim()).filter(Boolean))];
+}
+
+function getRowMatchKeys(row) {
+  if (!row) return [];
+  const keys = [];
+  stripGeneratedKeyAliases(row.key).forEach(key => keys.push(key));
+  stripGeneratedKeyAliases(row.id).forEach(key => keys.push(key));
+  stripGeneratedKeyAliases(row.sourceKey).forEach(key => keys.push(key));
+  keys.push(canonicalEditSignature(row));
+  keys.push(looseEditSignature(row));
+  if (row.key && row.levelScope && String(row.key).includes("::level::")) {
+    keys.push(String(row.key).replace(/::level::(small|medium|large|extra)$/, ""));
+  }
+  return uniqueKeys(keys);
+}
+
+function getEditMatchKeys(edit) {
+  if (!edit) return [];
+  const keys = [];
+  stripGeneratedKeyAliases(edit.key).forEach(key => keys.push(key));
+  stripGeneratedKeyAliases(edit.originalKey).forEach(key => keys.push(key));
+  if (Array.isArray(edit.matchKeys)) edit.matchKeys.forEach(key => stripGeneratedKeyAliases(key).forEach(alias => keys.push(alias)));
+  keys.push(sourceEditSignature(edit));
+  keys.push(canonicalEditSignature(edit));
+  keys.push(looseEditSignature(edit));
+  return uniqueKeys(keys);
+}
+
+function getEditForRowFromMap(row, editMap) {
+  const keys = getRowMatchKeys(row);
+  for (const key of keys) {
+    if (editMap.has(key)) return editMap.get(key);
+  }
+  return null;
+}
+
+function editMatchesRow(edit, row) {
+  const rowKeys = new Set(getRowMatchKeys(row));
+  return getEditMatchKeys(edit).some(key => rowKeys.has(key));
+}
+
+function removeEditsForRow(row) {
+  const before = teacherPackage.editedQuestions || [];
+  teacherPackage.editedQuestions = before.filter(item => !editMatchesRow(item, row));
+  return before.length - teacherPackage.editedQuestions.length;
+}
+
+function upsertEditForRow(row, edit) {
+  const edits = teacherPackage.editedQuestions || [];
+  const index = edits.findIndex(item => editMatchesRow(item, row));
+  if (index >= 0) {
+    edits[index] = edit;
+    teacherPackage.editedQuestions = edits;
+    return "updated";
+  }
+  teacherPackage.editedQuestions = [...edits, edit];
+  return "added";
 }
 
 function getStudentProgress() {
@@ -441,7 +557,7 @@ function renderList() {
     .filter(row => matchesLevel(row, level))
     .filter(row => {
       if (!query) return true;
-      const edit = edits.get(row.key);
+      const edit = getEditForRowFromMap(row, edits);
       const jp = edit?.jp || row.jp;
       const en = edit?.fullSentence || row.fullSentence;
       return normalizeText(`${jp} ${en}`).includes(query);
@@ -455,7 +571,7 @@ function renderList() {
   visibleRows = totalFilteredRows.slice(startIndex, endIndex);
 
   $("#editorListTitle").textContent = `中${grade}　${unit}`;
-  const editedCount = totalFilteredRows.filter(row => edits.has(row.key)).length;
+  const editedCount = totalFilteredRows.filter(row => getEditForRowFromMap(row, edits)).length;
   const searchText = query ? ` / 検索：「${$("#editorSearch").value.trim()}」` : "";
   const rangeText = totalFilteredRows.length ? `${startIndex + 1}〜${endIndex}問目` : "0問";
   $("#editorListSummary").textContent = `難易度：${LEVEL_LABELS[level] || level}${searchText}。該当 ${totalFilteredRows.length}問中、${rangeText}を表示中。編集済み ${editedCount}問。`;
@@ -468,7 +584,7 @@ function renderList() {
 
   const paginationHtml = buildPaginationControls(totalFilteredRows.length, currentPage, totalPages);
   list.innerHTML = paginationHtml + visibleRows.map((row, index) => {
-    const edit = edits.get(row.key);
+    const edit = getEditForRowFromMap(row, edits);
     const currentJp = edit?.jp || row.jp;
     const currentEn = edit?.fullSentence || row.fullSentence;
     const currentBlank = edit?.blankSentence || row.blankSentence || "";
@@ -568,7 +684,6 @@ function closeAllQuestionCards() {
 }
 
 function saveVisibleEdits() {
-  const editMap = getEditMap();
   let changed = 0;
 
   $$(".editor-question-card").forEach(card => {
@@ -579,19 +694,22 @@ function saveVisibleEdits() {
     const fullSentence = normalizeEnglish(card.querySelector('[data-field="fullSentence"]').value.trim());
     const blankSentence = normalizeBlankSentence(card.querySelector('[data-field="blankSentence"]').value.trim());
     const blankAnswer = String(card.querySelector('[data-field="blankAnswer"]').value || "").replace(/。/g, "").replace(/\s+/g, " ").trim();
-    if (!jp || !fullSentence || !blankSentence || !blankAnswer) return;
+    if (!jp || !fullSentence) return;
 
     const sameAsOriginal = normalizeText(jp) === normalizeText(row.jp)
       && normalizeEnglish(fullSentence) === normalizeEnglish(row.fullSentence)
       && normalizeBlankComparable(blankSentence) === normalizeBlankComparable(row.blankSentence || "")
       && normalizeText(blankAnswer) === normalizeText(row.blankAnswer || "");
     if (sameAsOriginal) {
-      if (editMap.delete(key)) changed++;
+      changed += removeEditsForRow(row);
       return;
     }
 
-    editMap.set(key, {
-      key,
+    const matchKeys = getRowMatchKeys(row);
+    const savedEdit = {
+      key: row.key,
+      originalKey: row.key,
+      matchKeys,
       grade: row.grade,
       unit: row.unit,
       level: row.levelScope || row.level || null,
@@ -600,35 +718,43 @@ function saveVisibleEdits() {
       fullSentence,
       blankSentence,
       blankAnswer,
-      choices: uniqueTokens(blankAnswer),
+      choices: blankAnswer ? uniqueTokens(blankAnswer) : [],
       originalJp: row.jp,
       originalFullSentence: row.fullSentence,
       originalBlankSentence: row.blankSentence || "",
       originalBlankAnswer: row.blankAnswer || "",
       updatedAt: new Date().toISOString(),
       teacherEdited: true,
-      teacherBlankEdited: true
-    });
+      teacherBlankEdited: Boolean(blankSentence && blankAnswer)
+    };
+    upsertEditForRow(row, savedEdit);
     changed++;
   });
 
-  teacherPackage.editedQuestions = [...editMap.values()];
   savePackage(changed ? `${changed}件の編集を保存しました。` : "変更はありませんでした。");
   renderList();
 }
 
 function resetVisibleEdits() {
   if (!visibleRows.length) return;
-  if (!confirm("表示中の単元について、編集済みの日本語文・英文を元に戻しますか。")) return;
-  const keys = new Set(visibleRows.map(row => row.key));
-  teacherPackage.editedQuestions = (teacherPackage.editedQuestions || []).filter(item => !keys.has(item.key));
-  savePackage("表示中の単元の編集を元に戻しました。");
+  if (!confirm("表示中の単元について、編集済みの日本語文・英文・穴埋めを元に戻しますか。")) return;
+  let removed = 0;
+  visibleRows.forEach(row => {
+    removed += removeEditsForRow(row);
+  });
+  savePackage(removed ? `${removed}件の編集を元に戻しました。` : "元に戻す編集はありませんでした。");
   renderList();
 }
 
 function restoreOne(key) {
-  teacherPackage.editedQuestions = (teacherPackage.editedQuestions || []).filter(item => item.key !== key);
-  savePackage("この問題を元に戻しました。");
+  const row = visibleRows.find(item => item.key === key) || getEditorQuestionRows().find(item => item.key === key);
+  if (row) {
+    const removed = removeEditsForRow(row);
+    savePackage(removed ? "この問題を元に戻しました。" : "この問題に保存済みの編集はありませんでした。");
+  } else {
+    teacherPackage.editedQuestions = (teacherPackage.editedQuestions || []).filter(item => item.key !== key && item.originalKey !== key);
+    savePackage("この問題を元に戻しました。");
+  }
   renderList();
 }
 

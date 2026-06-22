@@ -1097,6 +1097,8 @@ function normalizeEditedQuestion(item) {
   const choices = Array.isArray(item.choices) ? item.choices.map(String).filter(Boolean) : [];
   return {
     key,
+    originalKey: item.originalKey || key,
+    matchKeys: Array.isArray(item.matchKeys) ? item.matchKeys.map(String).filter(Boolean) : [],
     grade: Math.min(3, Math.max(1, Number(item.grade || 1))),
     unit: String(item.unit || ""),
     level: levelScope || null,
@@ -1120,6 +1122,79 @@ function buildBankQuestionKey(unit, index) {
   return `bank::${unit}::${index}`;
 }
 
+function stableEditLevelScope(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join("|") || "all";
+  return String(value || "all").trim() || "all";
+}
+
+function canonicalEditSignature({ grade, unit, levelScope, level, jp, fullSentence }) {
+  return [
+    "canonical",
+    String(grade || ""),
+    String(unit || ""),
+    stableEditLevelScope(levelScope || level || "all"),
+    normalize(jp || ""),
+    normalize(fullSentence || "")
+  ].join("::");
+}
+
+function looseEditSignature({ grade, unit, originalFullSentence, fullSentence }) {
+  return [
+    "loose",
+    String(grade || ""),
+    String(unit || ""),
+    normalize(originalFullSentence || fullSentence || "")
+  ].join("::");
+}
+
+function stripEditKeyAliases(key) {
+  const value = String(key || "").trim();
+  if (!value) return [];
+  const keys = [value];
+  const homeMatch = value.match(/^home-generated::(?:small|medium|large|extra)::(.+)$/);
+  if (homeMatch) keys.push(homeMatch[1]);
+  const levelMatch = value.match(/^(.*)::level::(small|medium|large|extra)$/);
+  if (levelMatch) keys.push(levelMatch[1], `${levelMatch[1]}::level::${levelMatch[2]}`);
+  return [...new Set(keys.filter(Boolean))];
+}
+
+function getQuestionMatchKeys(question) {
+  if (!question) return [];
+  const keys = [];
+  stripEditKeyAliases(question.key).forEach(key => keys.push(key));
+  stripEditKeyAliases(question.id).forEach(key => keys.push(key));
+  stripEditKeyAliases(question.sourceKey).forEach(key => keys.push(key));
+  const sourceKey = question.sourceKey || question.key || "";
+  const level = question.levelScope || question.level || state.selectedLevel || "all";
+  if (sourceKey) keys.push(`${sourceKey}::level::${level}`);
+  keys.push(canonicalEditSignature(question));
+  keys.push(looseEditSignature(question));
+  return [...new Set(keys.map(key => String(key || "").trim()).filter(Boolean))];
+}
+
+function getEditedQuestionMatchKeys(edit) {
+  if (!edit) return [];
+  const keys = [];
+  stripEditKeyAliases(edit.key).forEach(key => keys.push(key));
+  stripEditKeyAliases(edit.originalKey).forEach(key => keys.push(key));
+  if (Array.isArray(edit.matchKeys)) edit.matchKeys.forEach(key => stripEditKeyAliases(key).forEach(alias => keys.push(alias)));
+  keys.push(canonicalEditSignature({
+    grade: edit.grade,
+    unit: edit.unit,
+    levelScope: edit.levelScope || edit.level || "all",
+    jp: edit.originalJp || edit.jp,
+    fullSentence: edit.originalFullSentence || edit.fullSentence
+  }));
+  keys.push(canonicalEditSignature(edit));
+  keys.push(looseEditSignature(edit));
+  return [...new Set(keys.map(key => String(key || "").trim()).filter(Boolean))];
+}
+
+function editMatchesQuestionByKey(edit, question) {
+  const questionKeys = new Set(getQuestionMatchKeys(question));
+  return getEditedQuestionMatchKeys(edit).some(key => questionKeys.has(key));
+}
+
 function editLevelMatchesQuestion(edit, question) {
   const editLevel = edit.levelScope || edit.level || null;
   if (!editLevel || editLevel === "all") return true;
@@ -1132,8 +1207,7 @@ function editLevelMatchesQuestion(edit, question) {
 function applyEditedQuestionOverride(question) {
   const edits = Array.isArray(progress.editedQuestions) ? progress.editedQuestions : [];
   if (!edits.length || !question) return question;
-  const sourceKey = question.sourceKey || "";
-  const byKey = sourceKey ? edits.find(item => item.key === sourceKey && editLevelMatchesQuestion(item, question)) : null;
+  const byKey = edits.find(item => editLevelMatchesQuestion(item, question) && editMatchesQuestionByKey(item, question));
   const byOriginal = edits.find(item => {
     if (!item.originalFullSentence) return false;
     if (item.unit && question.unit && item.unit !== question.unit) return false;
