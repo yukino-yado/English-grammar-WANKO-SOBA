@@ -1,6 +1,8 @@
 import { get, list, put } from '@vercel/blob';
 
+const API_VERSION = 'v3.16-public-blob-hardfix';
 const PATHNAME = 'wankosoba/teacher-package.json';
+const WRITE_ACCESS = 'public';
 
 function emptyPackage() {
   return {
@@ -22,10 +24,19 @@ function normalizePackage(data) {
   return next;
 }
 
+function apiMeta() {
+  return {
+    ok: true,
+    apiVersion: API_VERSION,
+    blobPathname: PATHNAME,
+    writeAccess: WRITE_ACCESS,
+    hasBlobReadWriteToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    hasBlobStoreId: Boolean(process.env.BLOB_STORE_ID),
+    hasBlobWebhookPublicKey: Boolean(process.env.BLOB_WEBHOOK_PUBLIC_KEY)
+  };
+}
+
 function blobOptions(extra = {}) {
-  // 2026年以降のVercel Blobは、接続済みプロジェクトではOIDC認証が標準になっており、
-  // BLOB_READ_WRITE_TOKEN が環境変数に表示されない場合があります。
-  // token を明示しないことで、Vercel Functions 側の自動認証または従来の環境変数認証に任せます。
   const options = { ...extra };
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     options.token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -42,16 +53,25 @@ async function readBody(req) {
   return text ? JSON.parse(text) : {};
 }
 
+async function textFromBlobResult(result) {
+  if (!result) return '';
+  if (result.stream) {
+    const response = new Response(result.stream);
+    return response.text();
+  }
+  const url = result.downloadUrl || result.url;
+  if (!url) return '';
+  const readUrl = `${url}${String(url).includes('?') ? '&' : '?'}t=${Date.now()}`;
+  const response = await fetch(readUrl, { cache: 'no-store' });
+  if (!response.ok) return '';
+  return response.text();
+}
+
 async function readStoredPackage() {
-  // Private Blob Storeの場合はURLを直接fetchできないため、まずSDKのget()で読む。
-  // 既存のPublic保存データが残っている可能性もあるため、失敗時だけ旧方式にフォールバックする。
   try {
-    const result = await get(PATHNAME, blobOptions({ access: 'private' }));
-    if (result?.stream) {
-      const response = new Response(result.stream);
-      const text = await response.text();
-      return normalizePackage(text ? JSON.parse(text) : {});
-    }
+    const result = await get(PATHNAME, blobOptions());
+    const text = await textFromBlobResult(result);
+    if (text) return normalizePackage(JSON.parse(text));
   } catch (error) {
     const message = String(error?.message || error || '');
     if (!/not found|404|NoSuch|does not exist/i.test(message)) {
@@ -84,14 +104,16 @@ async function writeStoredPackage(data) {
   const normalized = normalizePackage(data);
   normalized.updatedAt = new Date().toISOString();
 
-  // 教師用の編集データなのでPrivate Blob Storeへ保存します。
-  // Vercel Functions上ではOIDC認証、または従来のBLOB_READ_WRITE_TOKEN認証で読み書きします。
-  await put(PATHNAME, JSON.stringify(normalized, null, 2), blobOptions({
-    access: 'private',
+  // このプロジェクトで作成済みのBlob StoreはPublic設定なので、必ずPublicとして保存する。
+  // ここで private を指定すると「Cannot use private access on a public store」が発生する。
+  const options = blobOptions({
+    access: WRITE_ACCESS,
     allowOverwrite: true,
     contentType: 'application/json',
     cacheControlMaxAge: 60
-  }));
+  });
+
+  await put(PATHNAME, JSON.stringify(normalized, null, 2), options);
   return normalized;
 }
 
@@ -99,6 +121,7 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0, must-revalidate');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('X-Wanko-Shared-API-Version', API_VERSION);
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
@@ -107,12 +130,17 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     try {
+      if (req.query?.debug === '1') {
+        res.status(200).json(apiMeta());
+        return;
+      }
       const data = await readStoredPackage();
-      res.status(200).json(data);
+      res.status(200).json({ ...data, _api: apiMeta() });
     } catch (error) {
       res.status(500).json({
         ok: false,
         code: 'BLOB_READ_FAILED',
+        apiVersion: API_VERSION,
         message: '共有データの読み込みに失敗しました。',
         detail: String(error?.message || error)
       });
@@ -124,17 +152,20 @@ export default async function handler(req, res) {
     try {
       const body = await readBody(req);
       const data = await writeStoredPackage(body?.package || body);
-      res.status(200).json({ ok: true, package: data });
+      res.status(200).json({ ok: true, apiVersion: API_VERSION, writeAccess: WRITE_ACCESS, package: data });
     } catch (error) {
+      const detail = String(error?.message || error);
       res.status(500).json({
         ok: false,
         code: 'BLOB_WRITE_FAILED',
+        apiVersion: API_VERSION,
+        writeAccess: WRITE_ACCESS,
         message: '共有データの保存に失敗しました。',
-        detail: String(error?.message || error)
+        detail
       });
     }
     return;
   }
 
-  res.status(405).json({ ok: false, message: 'Method Not Allowed' });
+  res.status(405).json({ ok: false, apiVersion: API_VERSION, message: 'Method Not Allowed' });
 }
