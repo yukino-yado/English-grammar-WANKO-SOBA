@@ -1,6 +1,6 @@
 import { get, list, put } from '@vercel/blob';
 
-const API_VERSION = 'v3.16-public-blob-hardfix';
+const API_VERSION = 'v3.17-public-read-access-fix';
 const PATHNAME = 'wankosoba/teacher-package.json';
 const WRITE_ACCESS = 'public';
 
@@ -30,6 +30,7 @@ function apiMeta() {
     apiVersion: API_VERSION,
     blobPathname: PATHNAME,
     writeAccess: WRITE_ACCESS,
+    readAccess: WRITE_ACCESS,
     hasBlobReadWriteToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
     hasBlobStoreId: Boolean(process.env.BLOB_STORE_ID),
     hasBlobWebhookPublicKey: Boolean(process.env.BLOB_WEBHOOK_PUBLIC_KEY)
@@ -42,6 +43,12 @@ function blobOptions(extra = {}) {
     options.token = process.env.BLOB_READ_WRITE_TOKEN;
   }
   return options;
+}
+
+function readBlobOptions(extra = {}) {
+  // @vercel/blob の新しいSDKでは get() に access 指定が必要になることがある。
+  // このBlob StoreはPublicなので、読み込み時も public を明示する。
+  return blobOptions({ access: WRITE_ACCESS, ...extra });
 }
 
 async function readBody(req) {
@@ -69,7 +76,7 @@ async function textFromBlobResult(result) {
 
 async function readStoredPackage() {
   try {
-    const result = await get(PATHNAME, blobOptions());
+    const result = await get(PATHNAME, readBlobOptions());
     const text = await textFromBlobResult(result);
     if (text) return normalizePackage(JSON.parse(text));
   } catch (error) {
@@ -152,7 +159,8 @@ export default async function handler(req, res) {
     try {
       const body = await readBody(req);
       const data = await writeStoredPackage(body?.package || body);
-      res.status(200).json({ ok: true, apiVersion: API_VERSION, writeAccess: WRITE_ACCESS, package: data });
+      res.status(200).json({ ok: true, apiVersion: API_VERSION, writeAccess: WRITE_ACCESS,
+    readAccess: WRITE_ACCESS, package: data });
     } catch (error) {
       const detail = String(error?.message || error);
       res.status(500).json({
@@ -160,6 +168,7 @@ export default async function handler(req, res) {
         code: 'BLOB_WRITE_FAILED',
         apiVersion: API_VERSION,
         writeAccess: WRITE_ACCESS,
+    readAccess: WRITE_ACCESS,
         message: '共有データの保存に失敗しました。',
         detail
       });
